@@ -1,0 +1,12 @@
+{
+  "name": "tablig-app",
+  "private": true,
+  "workspaces": {
+    "packages": ["apps/*"],
+    "nohoist": ["**"]
+  },
+  "scripts": {
+    "server": "yarn workspace server dev",
+    "mobile": "yarn workspace mobile start"
+  }
+}

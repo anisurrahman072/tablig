@@ -1,0 +1,3 @@
+const SUPER_ADMIN_MOBILE = '8801780581427';
+
+module.exports = { SUPER_ADMIN_MOBILE };
