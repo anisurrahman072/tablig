@@ -17,6 +17,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     supportsTablet: true,
   },
   android: {
+    package: 'com.anisur072.tablig',
     adaptiveIcon: {
       backgroundColor: '#E8F8F5',
     },
