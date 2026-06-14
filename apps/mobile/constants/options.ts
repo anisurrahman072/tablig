@@ -5,6 +5,7 @@ export const TIME_GIVEN_OPTIONS = [
   { label: 'এক চিল্লা', value: 40 },
   { label: 'তিন চিল্লা', value: 120 },
   { label: 'বিদেশ সফর', value: 200 },
+  { label: 'সময় দেওয়া হয়নি', value: 0 },
 ];
 
 export const MASTURAT_DAYS_OPTIONS = [
@@ -12,6 +13,7 @@ export const MASTURAT_DAYS_OPTIONS = [
   { label: 'সাত দিন', value: 7 },
   { label: 'দশ দিন', value: 10 },
   { label: 'পনেরো দিন', value: 15 },
+  { label: 'সময় দেওয়া হয়নি', value: 0 },
 ];
 
 export const STUDENT_CLASS_OPTIONS = [

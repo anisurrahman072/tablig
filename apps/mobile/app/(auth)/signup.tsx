@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { ScrollView, StyleSheet, Alert, KeyboardAvoidingView, Platform } from 'react-native';
+import { StyleSheet } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { GradientBackground } from '../../components/GradientBackground';
@@ -7,8 +7,10 @@ import { ScreenHeader } from '../../components/ScreenHeader';
 import { InputField } from '../../components/InputField';
 import { SelectField } from '../../components/SelectField';
 import { PrimaryButton } from '../../components/PrimaryButton';
+import { KeyboardFormScroll } from '../../components/KeyboardFormScroll';
 import { useAuth } from '../../context/AuthContext';
 import api from '../../lib/api';
+import { appAlert } from '../../lib/appAlert';
 import { spacing } from '../../theme';
 
 export default function SignupScreen() {
@@ -23,12 +25,17 @@ export default function SignupScreen() {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    api.get('/masjids').then((res) => setMasjids(res.data.data));
+    api
+      .get('/masjids')
+      .then((res) => setMasjids(res.data.data))
+      .catch((err: Error) => {
+        appAlert('ত্রুটি', err.message);
+      });
   }, []);
 
   async function handleSignup() {
     if (!name || !masjid || !mobile || !pin) {
-      Alert.alert('ত্রুটি', 'সব বাধ্যতামূলক ঘর পূরণ করুন');
+      appAlert('ত্রুটি', 'সব বাধ্যতামূলক ঘর পূরণ করুন');
       return;
     }
     try {
@@ -36,7 +43,7 @@ export default function SignupScreen() {
       await signup({ name, houseAddress, masjid, mobile, pin });
       router.replace('/(home)');
     } catch (err: any) {
-      Alert.alert('ত্রুটি', err.message);
+      appAlert('ত্রুটি', err.message);
     } finally {
       setLoading(false);
     }
@@ -45,11 +52,7 @@ export default function SignupScreen() {
   return (
     <GradientBackground>
       <SafeAreaView style={styles.safe}>
-        <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-          style={styles.flex}
-        >
-          <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+        <KeyboardFormScroll contentContainerStyle={styles.content}>
             <ScreenHeader title="সাইন আপ" />
             <InputField label="নাম *" value={name} onChangeText={setName} placeholder="আপনার নাম" />
             <InputField
@@ -73,7 +76,7 @@ export default function SignupScreen() {
               keyboardType="phone-pad"
             />
             <InputField
-              label="পিন *"
+              label="নতুন পিন সেট করুন *"
               value={pin}
               onChangeText={setPin}
               placeholder="কমপক্ষে ৪ অঙ্ক"
@@ -81,8 +84,7 @@ export default function SignupScreen() {
               keyboardType="numeric"
             />
             <PrimaryButton title="অ্যাকাউন্ট তৈরি করুন" onPress={handleSignup} loading={loading} />
-          </ScrollView>
-        </KeyboardAvoidingView>
+        </KeyboardFormScroll>
       </SafeAreaView>
     </GradientBackground>
   );
@@ -90,6 +92,5 @@ export default function SignupScreen() {
 
 const styles = StyleSheet.create({
   safe: { flex: 1 },
-  flex: { flex: 1 },
-  content: { padding: spacing.lg, paddingBottom: 40 },
+  content: { padding: spacing.lg },
 });

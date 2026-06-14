@@ -180,3 +180,13 @@ dependencies {
         implementation jscFlavor
     }
 }
+
+// `./gradlew clean` removes each library's `build/generated/source/codegen/jni/` before CMake runs.
+// `externalNativeBuildClean*` then re-invokes CMake, which reads Android-autolinking.cmake and
+// fails with "add_subdirectory ... which is not an existing directory". Skip these tasks so clean
+// succeeds; for a full native wipe delete `app/.cxx` (and optionally `app/build`) then rebuild.
+afterEvaluate {
+    tasks.matching { it.name.startsWith("externalNativeBuildClean") }.configureEach {
+        enabled = false
+    }
+}

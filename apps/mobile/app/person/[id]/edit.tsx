@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { ScrollView, StyleSheet, Alert, View, ActivityIndicator, KeyboardAvoidingView, Platform } from 'react-native';
+import { StyleSheet, View, ActivityIndicator } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { GradientBackground } from '../../../components/GradientBackground';
@@ -7,7 +7,9 @@ import { ScreenHeader } from '../../../components/ScreenHeader';
 import { InputField } from '../../../components/InputField';
 import { SelectField } from '../../../components/SelectField';
 import { PrimaryButton } from '../../../components/PrimaryButton';
+import { KeyboardFormScroll } from '../../../components/KeyboardFormScroll';
 import api from '../../../lib/api';
+import { appAlert } from '../../../lib/appAlert';
 import { displayMobile } from '../../../lib/mobile';
 import {
   TIME_GIVEN_OPTIONS,
@@ -63,17 +65,17 @@ export default function EditPersonScreen() {
 
   async function handleSave() {
     if (!form.name || !form.masjid) {
-      Alert.alert('ত্রুটি', 'নাম ও মসজিদ বাধ্যতামূলক');
+      appAlert('ত্রুটি', 'নাম ও মসজিদ বাধ্যতামূলক');
       return;
     }
     try {
       setLoading(true);
       await api.put(`/persons/${id}`, { type, ...form });
-      Alert.alert('সফল', 'তথ্য আপডেট হয়েছে', [
+      appAlert('সফল', 'তথ্য আপডেট হয়েছে', [
         { text: 'ঠিক আছে', onPress: () => router.back() },
       ]);
     } catch (err: any) {
-      Alert.alert('ত্রুটি', err.message);
+      appAlert('ত্রুটি', err.message);
     } finally {
       setLoading(false);
     }
@@ -87,12 +89,8 @@ export default function EditPersonScreen() {
             <ActivityIndicator size="large" color="#2E86AB" />
           </View>
         ) : (
-          <KeyboardAvoidingView
-            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-            style={styles.flex}
-          >
-            <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-              <ScreenHeader title="তথ্য সম্পাদনা" />
+          <KeyboardFormScroll contentContainerStyle={styles.content}>
+            <ScreenHeader title="তথ্য সম্পাদনা" />
           <InputField label="নাম *" value={form.name || ''} onChangeText={(v) => update('name', v)} />
           <SelectField
             label="কাছের মসজিদ *"
@@ -161,8 +159,7 @@ export default function EditPersonScreen() {
           )}
 
           <PrimaryButton title="আপডেট করুন" onPress={handleSave} loading={loading} />
-            </ScrollView>
-          </KeyboardAvoidingView>
+          </KeyboardFormScroll>
         )}
       </SafeAreaView>
     </GradientBackground>
@@ -171,7 +168,6 @@ export default function EditPersonScreen() {
 
 const styles = StyleSheet.create({
   safe: { flex: 1 },
-  flex: { flex: 1 },
-  content: { padding: spacing.lg, paddingBottom: 40 },
+  content: { padding: spacing.lg, paddingBottom: spacing.xl * 2 },
   centered: { flex: 1, justifyContent: 'center', alignItems: 'center' },
 });

@@ -3,7 +3,7 @@ const Account = require('../models/Account');
 const School = require('../models/School');
 const Person = require('../models/Person');
 const { MASJIDS } = require('../constants');
-const { SUPER_ADMIN_MOBILE } = require('../constants/admin');
+const { getSuperAdminMobile, isSuperAdminMobile } = require('../constants/admin');
 const { normalizeMobile } = require('../utils/mobile');
 
 const SEED_SCHOOLS = [
@@ -19,8 +19,12 @@ async function seedMasjids() {
 }
 
 async function seedSchools() {
+  // Only seed defaults on a fresh database — never recreate schools after admin deletes them.
+  const hasAnySchool = await School.exists({});
+  if (hasAnySchool) return;
+
   for (const name of SEED_SCHOOLS) {
-    await School.updateOne({ name }, { name }, { upsert: true });
+    await School.create({ name });
   }
 }
 
@@ -70,7 +74,7 @@ async function seedSuperAdmin() {
   await fixMobileNumbers();
 
   await Account.updateOne(
-    { mobile: SUPER_ADMIN_MOBILE },
+    { mobile: getSuperAdminMobile() },
     { $set: { isAdmin: true } }
   );
 }

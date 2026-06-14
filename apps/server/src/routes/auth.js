@@ -5,11 +5,16 @@ const { z } = require('zod');
 const Account = require('../models/Account');
 const Person = require('../models/Person');
 const Otp = require('../models/Otp');
+const {
+  ACTIVE,
+  syncAccountToClaimedPerson,
+  findLinkedPersonByMobile,
+} = require('../utils/directory');
 const { AppError } = require('../utils/errors');
 const { normalizeMobile, isValidBangladeshMobile } = require('../utils/mobile');
 const { sendSMS } = require('../services/sms');
 const { isValidMasjid } = require('../utils/masjid');
-const { SUPER_ADMIN_MOBILE } = require('../constants/admin');
+const { isSuperAdminMobile } = require('../constants/admin');
 const authMiddleware = require('../middleware/auth');
 
 const router = express.Router();
@@ -40,16 +45,51 @@ function accountResponse(account, token) {
       houseAddress: account.houseAddress,
       masjid: account.masjid,
       mobile: account.mobile,
+      pin: account.pinPlain || '',
       isAdmin: !!account.isAdmin,
+      isSuperAdmin: isSuperAdminMobile(account.mobile),
     },
   };
 }
 
-async function claimPersonsByMobile(account) {
-  await Person.updateMany(
-    { mobile: account.mobile, isLocked: false },
-    { claimedBy: account._id, isLocked: true }
-  );
+const UNCLAIMED_LOGIN_MESSAGE = 'Apnar account toiri korun';
+
+async function ensureAccountHouseAddress(account) {
+  if (account.houseAddress?.trim()) return account;
+
+  const linkedPerson = await findLinkedPersonByMobile(account.mobile, account._id);
+  const personHouse = linkedPerson?.houseLocation?.trim();
+  if (personHouse) {
+    account.houseAddress = personHouse;
+    await account.save();
+  }
+  return account;
+}
+
+async function findUnclaimedPersonByMobile(mobile) {
+  return Person.findOne({
+    mobile,
+    isDeleted: ACTIVE,
+    claimedBy: null,
+  });
+}
+
+function pickPrimaryUnclaimedPerson(persons) {
+  if (!persons.length) return null;
+  return persons.find((p) => p.type === 'sathi') || persons[0];
+}
+
+function applySignupMasterInfoToPerson(person, signupData) {
+  person.name = signupData.name.trim();
+  person.masjid = signupData.masjid;
+
+  const houseAddress = signupData.houseAddress?.trim();
+  if (houseAddress) {
+    person.houseLocation = houseAddress;
+  }
+
+  person.claimedBy = signupData.accountId;
+  person.isLocked = true;
 }
 
 router.post('/signup', async (req, res, next) => {
@@ -70,17 +110,32 @@ router.post('/signup', async (req, res, next) => {
       throw new AppError('এই মোবাইল নম্বরে ইতিমধ্যে অ্যাকাউন্ট আছে');
     }
 
+    const unclaimedPersons = await Person.find({
+      mobile,
+      isDeleted: ACTIVE,
+      claimedBy: null,
+    });
+
+    const primaryPerson = pickPrimaryUnclaimedPerson(unclaimedPersons);
+    const signupHouse = data.houseAddress?.trim();
+    const mergedHouseAddress =
+      signupHouse || primaryPerson?.houseLocation?.trim() || '';
+
     const pinHash = await bcrypt.hash(data.pin, 10);
     const account = await Account.create({
       name: data.name.trim(),
-      houseAddress: data.houseAddress?.trim() || '',
+      houseAddress: mergedHouseAddress,
       masjid: data.masjid,
       mobile,
       pinHash,
-      isAdmin: mobile === SUPER_ADMIN_MOBILE,
+      pinPlain: data.pin,
+      isAdmin: isSuperAdminMobile(mobile),
     });
 
-    await claimPersonsByMobile(account);
+    for (const person of unclaimedPersons) {
+      applySignupMasterInfoToPerson(person, { ...data, accountId: account._id });
+      await person.save();
+    }
 
     const token = createToken(account);
     res.status(201).json({ success: true, data: accountResponse(account, token) });
@@ -97,18 +152,91 @@ router.post('/signup', async (req, res, next) => {
 
 router.get('/me', authMiddleware, async (req, res, next) => {
   try {
+    const account = await ensureAccountHouseAddress(req.account);
     res.json({
       success: true,
       data: {
-        id: req.account._id,
-        name: req.account.name,
-        houseAddress: req.account.houseAddress,
-        masjid: req.account.masjid,
-        mobile: req.account.mobile,
-        isAdmin: !!req.account.isAdmin,
+        id: account._id,
+        name: account.name,
+        houseAddress: account.houseAddress,
+        masjid: account.masjid,
+        mobile: account.mobile,
+        pin: account.pinPlain || '',
+        isAdmin: !!account.isAdmin,
+        isSuperAdmin: isSuperAdminMobile(account.mobile),
       },
     });
   } catch (err) {
+    next(err);
+  }
+});
+
+const updateProfileSchema = z.object({
+  name: z.string().min(2, 'নাম দিন').optional(),
+  houseAddress: z.string().optional(),
+  masjid: z.string().min(1, 'মসজিদ নির্বাচন করুন').optional(),
+  mobile: z.string().min(11, 'মোবাইল নম্বর দিন').optional(),
+  pin: z.string().min(4, 'পিন কমপক্ষে ৪ অঙ্কের হতে হবে').optional().or(z.literal('')),
+});
+
+router.put('/profile', authMiddleware, async (req, res, next) => {
+  try {
+    const data = updateProfileSchema.parse(req.body);
+    const account = await Account.findById(req.account._id);
+
+    if (!account) {
+      throw new AppError('অ্যাকাউন্ট পাওয়া যায়নি', 404);
+    }
+
+    if (data.name) account.name = data.name.trim();
+    if (data.houseAddress !== undefined) account.houseAddress = data.houseAddress.trim();
+    if (data.masjid) {
+      if (!(await isValidMasjid(data.masjid))) {
+        throw new AppError('সঠিক মসজিদ নির্বাচন করুন');
+      }
+      account.masjid = data.masjid;
+    }
+
+    if (data.mobile) {
+      const mobile = normalizeMobile(data.mobile);
+      if (!isValidBangladeshMobile(mobile)) {
+        throw new AppError('সঠিক বাংলাদেশি মোবাইল নম্বর দিন');
+      }
+      if (mobile !== account.mobile) {
+        const existing = await Account.findOne({ mobile });
+        if (existing) {
+          throw new AppError('মোবাইল নম্বরটি ইতিমধ্যে ব্যাবহৃত হচ্ছে!');
+        }
+        account.mobile = mobile;
+      }
+    }
+
+    if (data.pin && data.pin.length >= 4) {
+      account.pinHash = await bcrypt.hash(data.pin, 10);
+      account.pinPlain = data.pin;
+    }
+
+    await account.save();
+    await syncAccountToClaimedPerson(account);
+
+    res.json({
+      success: true,
+      message: 'প্রোফাইল আপডেট হয়েছে',
+      data: {
+        id: account._id,
+        name: account.name,
+        houseAddress: account.houseAddress,
+        masjid: account.masjid,
+        mobile: account.mobile,
+        pin: account.pinPlain || '',
+        isAdmin: !!account.isAdmin,
+        isSuperAdmin: isSuperAdminMobile(account.mobile),
+      },
+    });
+  } catch (err) {
+    if (err instanceof z.ZodError) {
+      return next(new AppError(err.errors[0].message));
+    }
     next(err);
   }
 });
@@ -120,6 +248,10 @@ router.post('/login', async (req, res, next) => {
 
     const account = await Account.findOne({ mobile });
     if (!account) {
+      const unclaimedPerson = await findUnclaimedPersonByMobile(mobile);
+      if (unclaimedPerson) {
+        throw new AppError(UNCLAIMED_LOGIN_MESSAGE);
+      }
       throw new AppError('মোবাইল বা পিন ভুল');
     }
 
@@ -130,6 +262,7 @@ router.post('/login', async (req, res, next) => {
 
     account.lastLoginAt = new Date();
     await account.save();
+    await ensureAccountHouseAddress(account);
 
     const token = createToken(account);
     res.json({ success: true, data: accountResponse(account, token) });
@@ -156,6 +289,7 @@ router.post('/forgot-pin', async (req, res, next) => {
     // Generate a new random 4-digit PIN, save it, and send it via SMS
     const newPin = String(Math.floor(1000 + Math.random() * 9000));
     account.pinHash = await bcrypt.hash(newPin, 10);
+    account.pinPlain = newPin;
     await account.save();
 
     const message = `তাবলিগ অ্যাপ: আপনার নতুন পিন হলো ${newPin}। লগইন করুন।`;
@@ -230,6 +364,7 @@ router.post('/reset-pin', async (req, res, next) => {
     }
 
     account.pinHash = await bcrypt.hash(String(newPin), 10);
+    account.pinPlain = String(newPin);
     await account.save();
 
     res.json({ success: true, message: 'পিন সফলভাবে পরিবর্তন হয়েছে' });

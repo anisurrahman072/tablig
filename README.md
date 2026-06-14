@@ -54,14 +54,80 @@ yarn server
 
 ## মোবাইল অ্যাপ চালানো
 
-```bash
-# apps/mobile/.env
-# EXPO_PUBLIC_API_URL=http://YOUR_IP:3004/api
+প্রথমে `apps/mobile/.env` সেট করুন (`.env.example` দেখুন):
 
-yarn mobile
+```bash
+EXPO_PUBLIC_API_URL=http://YOUR_IP:3004/api
+RCT_METRO_PORT=8082
 ```
 
 ফিজিক্যাল ডিভাইসে টেস্ট করলে `localhost` এর বদলে কম্পিউটারের LAN IP ব্যবহার করুন।
+
+এই অ্যাপ **Expo Go**-তে চলে না — **dev client** (নেটিভ বিল্ড) দরকার (`expo-dev-client`)।
+
+### ১) নেটিভ অ্যাপ লোকাল ডেভেলপমেন্টে চালানো
+
+রুট থেকে (প্রথম বিল্ড বা ক্লিন রিবিল্ড):
+
+```bash
+yarn mobile:android:clean
+```
+
+সাধারণ রিবিল্ড ও ইনস্টল (ক্লিন ছাড়া):
+
+```bash
+yarn mobile:android
+```
+
+`apps/mobile` থেকে সরাসরি:
+
+```bash
+cd apps/mobile
+yarn android:clean   # ক্লিন + বিল্ড + ইনস্টল + Metro
+# অথবা
+yarn android         # ক্লিন ছাড়া
+```
+
+এই কমান্ডগুলো `expo run:android` চালায় — নেটিভ APK বিল্ড করে ডিভাইস/এমুলেটরে ইনস্টল করে, তারপর Metro (পোর্ট `8082`) চালু রাখে।
+
+### ২) শুধু Metro সার্ভার চালানো
+
+অ্যাপ ইতিমধ্যে ডিভাইসে ইনস্টল থাকলে JS বান্ডল সার্ভ করতে শুধু Metro দরকার:
+
+```bash
+yarn mobile
+```
+
+(`expo start --dev-client --port 8082` — নেটিভ অ্যাপ রিবিল্ড/ইনস্টল **না** করে)
+
+### ৩) রিলিজ APK বিল্ড
+
+**প্রয়োজনীয় সফটওয়্যার:**
+
+- Node.js 18+, Yarn (`yarn install` রুটে)
+- Android SDK + JDK (Android Studio ইনস্টল করলে সাধারণত আসে)
+- `ANDROID_HOME` সেট (SDK path)
+- `apps/mobile/.env` — `EXPO_PUBLIC_API_URL` প্রোডাকশন/টেস্ট API URL
+- প্রোডাকশন রিলিজের জন্য: সাইনিং keystore (বর্তমানে `build.gradle` ডিবাগ কী দিয়ে রিলিজ সাইন করে — স্টোরে আপলোডের আগে প্রোডাকশন keystore সেট করুন)
+
+**বিল্ড কমান্ড:**
+
+```bash
+cd apps/mobile/android
+./gradlew assembleRelease
+```
+
+**APK যেখানে পড়ে:**
+
+```
+apps/mobile/android/app/build/outputs/apk/release/app-release.apk
+```
+
+ডিভাইসে সরাসরি ইনস্টল:
+
+```bash
+adb install apps/mobile/android/app/build/outputs/apk/release/app-release.apk
+```
 
 ## API এন্ডপয়েন্ট
 

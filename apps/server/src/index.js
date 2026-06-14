@@ -12,6 +12,8 @@ const schoolRoutes = require('./routes/schools');
 const adminRoutes = require('./routes/admin');
 const constantsRoutes = require('./routes/constants');
 const personRoutes = require('./routes/persons');
+const personSmsRoutes = require('./routes/personSms');
+const batchSmsRoutes = require('./routes/batchSms');
 const karguzariRoutes = require('./routes/karguzari');
 
 const app = express();
@@ -42,6 +44,8 @@ app.use('/api/schools', schoolRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/constants', constantsRoutes);
 app.use('/api/persons', personRoutes);
+app.use('/api/persons/:id/sms', personSmsRoutes);
+app.use('/api/sms/batches', batchSmsRoutes);
 app.use('/api/persons/:id/karguzari', karguzariRoutes);
 
 app.use(errorHandler);

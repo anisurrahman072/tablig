@@ -7,6 +7,9 @@
   },
   "scripts": {
     "server": "yarn workspace server dev",
-    "mobile": "yarn workspace mobile start"
+    "mobile": "yarn workspace mobile start",
+    "mobile:android": "yarn workspace mobile android",
+    "mobile:android:clean": "yarn workspace mobile android:clean",
+    "mobile:clean": "yarn workspace mobile clean"
   }
 }

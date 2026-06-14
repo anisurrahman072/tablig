@@ -28,7 +28,11 @@ api.interceptors.request.use((config) => {
 api.interceptors.response.use(
   (res) => res,
   (error) => {
-    const message = error.response?.data?.message || 'সংযোগে সমস্যা হয়েছে';
+    const message =
+      error.response?.data?.message ||
+      (error.response
+        ? 'সার্ভারে সমস্যা হয়েছে'
+        : 'সার্ভারে সংযোগ করা যায়নি। সার্ভার চালু আছে কিনা এবং ফোন একই Wi‑Fi-তে আছে কিনা দেখুন।');
     return Promise.reject(new Error(message));
   }
 );

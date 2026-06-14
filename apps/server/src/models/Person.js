@@ -18,10 +18,18 @@ const personSchema = new mongoose.Schema(
     createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'Account', required: true },
     claimedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'Account', default: null },
     isLocked: { type: Boolean, default: false },
+    isDeleted: { type: Boolean, default: false },
   },
   { timestamps: true }
 );
 
 personSchema.index({ name: 'text', schoolName: 'text' });
+
+// Compound indexes for fast directory listing and filtering
+personSchema.index({ isDeleted: 1, updatedAt: -1 });
+personSchema.index({ isDeleted: 1, type: 1, updatedAt: -1 });
+personSchema.index({ isDeleted: 1, masjid: 1, updatedAt: -1 });
+personSchema.index({ claimedBy: 1, isDeleted: 1 });
+personSchema.index({ mobile: 1, isDeleted: 1 });
 
 module.exports = mongoose.model('Person', personSchema);

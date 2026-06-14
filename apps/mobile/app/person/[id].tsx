@@ -5,7 +5,6 @@ import {
   View,
   RefreshControl,
   ActivityIndicator,
-  Alert,
   TouchableOpacity,
 } from 'react-native';
 import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
@@ -15,22 +14,20 @@ import { ScreenHeader } from '../../components/ScreenHeader';
 import { AppText } from '../../components/AppText';
 import { PrimaryButton } from '../../components/PrimaryButton';
 import api from '../../lib/api';
+import { appAlert } from '../../lib/appAlert';
 import { displayMobile } from '../../lib/mobile';
+import { useAuth } from '../../context/AuthContext';
 import {
   TIME_GIVEN_OPTIONS,
   MASTURAT_DAYS_OPTIONS,
   STUDENT_CLASS_OPTIONS,
 } from '../../constants/options';
+import { KarguzariPremiumSection } from '../../components/KarguzariPremiumSection';
 import { colors, radius, shadows, spacing } from '../../theme';
 
 function labelForValue(options: { label: string; value: number }[], value?: number | null) {
   if (value == null) return '—';
   return options.find((o) => o.value === value)?.label || '—';
-}
-
-function formatDate(date: string) {
-  const d = new Date(date);
-  return d.toLocaleDateString('bn-BD');
 }
 
 function formatDateTime(dateStr: string) {
@@ -47,21 +44,31 @@ function formatDateTime(dateStr: string) {
 export default function PersonProfileScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
+  const { account } = useAuth();
+  const isAdmin = !!account?.isAdmin;
   const [person, setPerson] = useState<any>(null);
-  const [karguzari, setKarguzari] = useState<any[]>([]);
+  const [smsLogs, setSmsLogs] = useState<any[]>([]);
   const [refreshing, setRefreshing] = useState(false);
+  const [karguzariRefreshToken, setKarguzariRefreshToken] = useState(0);
   const [loadError, setLoadError] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
   const load = useCallback(async () => {
     setLoadError(false);
-    const [personRes, kargRes] = await Promise.all([
-      api.get(`/persons/${id}`),
-      api.get(`/persons/${id}/karguzari`),
-    ]);
-    setPerson(personRes.data.data);
-    setKarguzari(kargRes.data.data);
-  }, [id]);
+    const requests: Promise<any>[] = [api.get(`/persons/${id}`)];
+    if (isAdmin) {
+      requests.push(api.get(`/persons/${id}/sms`));
+    }
+
+    const results = await Promise.all(requests);
+    setPerson(results[0].data.data);
+    if (isAdmin) {
+      setSmsLogs(results[1].data.data);
+    } else {
+      setSmsLogs([]);
+    }
+    setKarguzariRefreshToken((t) => t + 1);
+  }, [id, isAdmin]);
 
   useFocusEffect(
     useCallback(() => {
@@ -76,7 +83,7 @@ export default function PersonProfileScreen() {
   }
 
   function confirmDelete() {
-    Alert.alert(
+    appAlert(
       'রেকর্ড মুছুন',
       `"${person?.name}" এর তথ্য চিরতরে মুছে ফেলা হবে। আপনি কি নিশ্চিত?`,
       [
@@ -96,7 +103,7 @@ export default function PersonProfileScreen() {
       await api.delete(`/persons/${id}`);
       router.back();
     } catch (err: any) {
-      Alert.alert('ত্রুটি', err.message || 'মুছে ফেলা সম্ভব হয়নি');
+      appAlert('ত্রুটি', err.message || 'মুছে ফেলা সম্ভব হয়নি');
     } finally {
       setDeleting(false);
     }
@@ -229,20 +236,73 @@ export default function PersonProfileScreen() {
             </TouchableOpacity>
           ) : null}
 
-          <AppText style={styles.sectionTitle}>মেহনতের কারগুজারি</AppText>
-          {karguzari.length === 0 ? (
-            <AppText style={styles.empty}>এখনো কারগুজারি নেই</AppText>
-          ) : (
-            karguzari.map((k) => (
-              <View key={k._id} style={styles.kCard}>
-                <AppText style={styles.kDate}>
-                  {formatDate(k.meetingDate)} • {k.timeSlot}
-                </AppText>
-                <AppText style={styles.kAuthor}>লিখেছেন: {k.author?.name}</AppText>
-                <AppText style={styles.kText}>{k.text}</AppText>
-              </View>
-            ))
-          )}
+          {isAdmin ? (
+            <>
+              <AppText style={styles.sectionTitle}>এসএমএস ইতিহাস</AppText>
+              {smsLogs.length === 0 ? (
+                <AppText style={styles.empty}>এখনো কোনো এসএমএস পাঠানো হয়নি</AppText>
+              ) : (
+                smsLogs.map((log) => (
+                  <View key={log._id} style={styles.smsCard}>
+                    <AppText style={styles.smsMeta}>
+                      {formatDateTime(log.createdAt)} • পাঠিয়েছেন: {log.sender?.name || '—'}
+                      {log.batch ? ' • ব্যাচ' : ''}
+                    </AppText>
+                    <AppText style={styles.smsText}>{log.message}</AppText>
+                    <AppText style={styles.smsFoot}>
+                      {log.status === 'sent' ? 'পাঠানো হয়েছে' : 'ব্যর্থ'} • {log.charCount} অক্ষর •{' '}
+                      {log.encoding === 'unicode' ? 'বাংলা' : 'ইংরেজি'}
+                      {log.errorMessage ? ` • ${log.errorMessage}` : ''}
+                    </AppText>
+                  </View>
+                ))
+              )}
+            </>
+          ) : null}
+
+          <KarguzariPremiumSection
+            personId={id}
+            endpoint="received"
+            title={`${person.name} এর সাথে সাক্ষাত হয়েছে`}
+            subtitle="অন্যরা যাদের সাথে এই ব্যক্তির সাক্ষাতের কারগুজারি লিখেছেন"
+            emptyText="এখনো কেউ কারগুজারি লিখেননি"
+            headerColors={['#2E86AB', '#48C9B0']}
+            icon="hand-left-outline"
+            cardTint="#E8F6FC"
+            cardBorder="rgba(46, 134, 171, 0.18)"
+            accentColor="#2E86AB"
+            refreshToken={karguzariRefreshToken}
+          />
+
+          <KarguzariPremiumSection
+            personId={id}
+            endpoint="authored"
+            title={`${person.name} যাদের উপর মেহনত করেছেন`}
+            subtitle="এই ব্যক্তি নিজে যাদের সাথে সাক্ষাত করে কারগুজারি লিখেছেন"
+            emptyText="এখনো কারগুজারি যোগ করা হয়নি"
+            headerColors={['#A23B72', '#E056A0']}
+            icon="create-outline"
+            cardTint="#F9EDF5"
+            cardBorder="rgba(162, 59, 114, 0.16)"
+            accentColor="#A23B72"
+            showVisitedPerson
+            refreshToken={karguzariRefreshToken}
+          />
+
+          <KarguzariPremiumSection
+            personId={id}
+            endpoint="attended"
+            title={`${person.name} মেহনতে উপস্থিত ছিলেন`}
+            subtitle="অন্যের সাক্ষাতে উপস্থিত থাকার রেকর্ড"
+            emptyText="মেহনতে উপস্থিত থাকার কোনো রেকর্ড নেই"
+            headerColors={['#F18F01', '#FFB347']}
+            icon="people-outline"
+            cardTint="#FFF4E6"
+            cardBorder="rgba(241, 143, 1, 0.2)"
+            accentColor="#F18F01"
+            showVisitedPerson
+            refreshToken={karguzariRefreshToken}
+          />
         </ScrollView>
       </SafeAreaView>
     </GradientBackground>
@@ -359,30 +419,32 @@ const styles = StyleSheet.create({
     marginBottom: spacing.md,
     color: colors.text,
   },
-  kCard: {
+  smsCard: {
     backgroundColor: colors.card,
     borderRadius: radius.md,
     padding: spacing.md,
     marginBottom: spacing.sm,
+    borderWidth: 1,
+    borderColor: 'rgba(46, 134, 171, 0.12)',
     ...shadows.card,
   },
-  kDate: {
+  smsMeta: {
     fontFamily: 'HindSiliguri_600SemiBold',
     color: colors.primary,
-    fontSize: 14,
-  },
-  kAuthor: {
-    fontFamily: 'HindSiliguri_400Regular',
-    color: colors.textLight,
     fontSize: 13,
-    marginTop: 2,
   },
-  kText: {
+  smsText: {
     fontFamily: 'HindSiliguri_400Regular',
     color: colors.text,
     fontSize: 15,
     marginTop: spacing.sm,
     lineHeight: 22,
+  },
+  smsFoot: {
+    fontFamily: 'HindSiliguri_400Regular',
+    color: colors.textLight,
+    fontSize: 12,
+    marginTop: spacing.sm,
   },
   empty: {
     fontFamily: 'HindSiliguri_400Regular',

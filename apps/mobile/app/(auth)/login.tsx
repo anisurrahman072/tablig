@@ -3,7 +3,6 @@ import {
   ScrollView,
   StyleSheet,
   TouchableOpacity,
-  Alert,
   KeyboardAvoidingView,
   Platform,
   View,
@@ -11,11 +10,13 @@ import {
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { GradientBackground } from '../../components/GradientBackground';
+import { AppLogo } from '../../components/AppLogo';
 import { ScreenHeader } from '../../components/ScreenHeader';
 import { InputField } from '../../components/InputField';
 import { PrimaryButton } from '../../components/PrimaryButton';
 import { AppText } from '../../components/AppText';
 import { useAuth } from '../../context/AuthContext';
+import { appAlert } from '../../lib/appAlert';
 import { colors, radius, spacing } from '../../theme';
 
 export default function LoginScreen() {
@@ -25,18 +26,26 @@ export default function LoginScreen() {
   const [mobile, setMobile] = useState('');
   const [pin, setPin] = useState('');
   const [loading, setLoading] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  const UNCLAIMED_MESSAGE = 'Apnar account toiri korun';
 
   async function handleLogin() {
     if (!mobile || !pin) {
-      Alert.alert('ত্রুটি', 'মোবাইল ও পিন দিন');
+      appAlert('ত্রুটি', 'মোবাইল ও পিন দিন');
       return;
     }
     try {
       setLoading(true);
+      setErrorMsg(null);
       await login(mobile, pin);
       router.replace('/(home)');
     } catch (err: any) {
-      Alert.alert('ত্রুটি', err.message);
+      if (err.message === UNCLAIMED_MESSAGE) {
+        setErrorMsg(UNCLAIMED_MESSAGE);
+      } else {
+        appAlert('ত্রুটি', err.message);
+      }
     } finally {
       setLoading(false);
     }
@@ -45,6 +54,11 @@ export default function LoginScreen() {
   return (
     <GradientBackground>
       <SafeAreaView style={styles.safe}>
+        {errorMsg ? (
+          <View style={styles.errorBanner}>
+            <AppText style={styles.errorBannerText}>{errorMsg}</AppText>
+          </View>
+        ) : null}
         {successMsg ? (
           <View style={styles.banner}>
             <AppText style={styles.bannerText}>✓  {successMsg}</AppText>
@@ -55,18 +69,27 @@ export default function LoginScreen() {
           style={styles.flex}
         >
           <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+            <View style={styles.logoContainer}>
+              <AppLogo size={100} />
+            </View>
             <ScreenHeader title="লগইন" />
             <InputField
               label="মোবাইল নম্বর"
               value={mobile}
-              onChangeText={setMobile}
+              onChangeText={(v) => {
+                setMobile(v);
+                setErrorMsg(null);
+              }}
               placeholder="০১XXXXXXXXX"
               keyboardType="phone-pad"
             />
             <InputField
               label="পিন"
               value={pin}
-              onChangeText={setPin}
+              onChangeText={(v) => {
+                setPin(v);
+                setErrorMsg(null);
+              }}
               placeholder="••••"
               secureTextEntry
               keyboardType="numeric"
@@ -86,6 +109,25 @@ const styles = StyleSheet.create({
   safe: { flex: 1 },
   flex: { flex: 1 },
   content: { padding: spacing.lg },
+  logoContainer: {
+    alignItems: 'center',
+    marginTop: spacing.lg,
+    marginBottom: spacing.sm,
+  },
+  errorBanner: {
+    backgroundColor: '#E74C3C',
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    marginHorizontal: spacing.md,
+    marginTop: spacing.sm,
+    borderRadius: radius.md,
+  },
+  errorBannerText: {
+    fontFamily: 'HindSiliguri_600SemiBold',
+    color: '#FFFFFF',
+    fontSize: 15,
+    textAlign: 'center',
+  },
   banner: {
     backgroundColor: colors.success,
     paddingVertical: spacing.sm,

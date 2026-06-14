@@ -8,7 +8,9 @@ type Account = {
   houseAddress?: string;
   masjid: string;
   mobile: string;
+  pin?: string;
   isAdmin?: boolean;
+  isSuperAdmin?: boolean;
 };
 
 type AuthContextType = {

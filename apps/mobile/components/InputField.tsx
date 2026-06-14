@@ -1,6 +1,12 @@
-import React from 'react';
-import { View, TextInput, StyleSheet } from 'react-native';
+import React, { useRef } from 'react';
+import {
+  View,
+  TextInput,
+  StyleSheet,
+  FocusEvent,
+} from 'react-native';
 import { AppText } from './AppText';
+import { useScrollOnInputFocus } from './KeyboardFormScroll';
 import { colors, radius, spacing } from '../theme';
 
 type Props = {
@@ -11,6 +17,7 @@ type Props = {
   secureTextEntry?: boolean;
   keyboardType?: 'default' | 'phone-pad' | 'numeric';
   multiline?: boolean;
+  onFocus?: (e: FocusEvent) => void;
 };
 
 export function InputField({
@@ -21,9 +28,18 @@ export function InputField({
   secureTextEntry,
   keyboardType = 'default',
   multiline,
+  onFocus,
 }: Props) {
+  const wrapRef = useRef<View>(null);
+  const scrollIntoView = useScrollOnInputFocus();
+
+  function handleFocus(e: FocusEvent) {
+    onFocus?.(e);
+    scrollIntoView?.(wrapRef);
+  }
+
   return (
-    <View style={styles.wrap}>
+    <View ref={wrapRef} style={styles.wrap}>
       <AppText style={styles.label}>{label}</AppText>
       <TextInput
         value={value}
@@ -33,6 +49,7 @@ export function InputField({
         secureTextEntry={secureTextEntry}
         keyboardType={keyboardType}
         multiline={multiline}
+        onFocus={handleFocus}
         style={[styles.input, multiline && styles.multiline]}
       />
     </View>

@@ -1,12 +1,22 @@
-import React, { useCallback } from 'react';
-import { ScrollView, StyleSheet, TouchableOpacity, View, Alert } from 'react-native';
-import { useRouter, useFocusEffect } from 'expo-router';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { GradientBackground } from '../../components/GradientBackground';
-import { BigCard } from '../../components/BigCard';
-import { AppText } from '../../components/AppText';
-import { useAuth } from '../../context/AuthContext';
-import { colors, radius, shadows, spacing } from '../../theme';
+import React, { useCallback } from "react";
+import {
+  ScrollView,
+  StyleSheet,
+  TouchableOpacity,
+  View,
+  Alert,
+} from "react-native";
+import { Ionicons } from "@expo/vector-icons";
+import { useRouter, useFocusEffect } from "expo-router";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { GradientBackground } from "../../components/GradientBackground";
+import { AppLogo } from "../../components/AppLogo";
+import { BigCard } from "../../components/BigCard";
+import { SearchHubCard } from "../../components/SearchHubCard";
+import { AdminHubCard } from "../../components/AdminHubCard";
+import { AppText } from "../../components/AppText";
+import { useAuth } from "../../context/AuthContext";
+import { colors, radius, shadows, spacing } from "../../theme";
 
 export default function HomeScreen() {
   const router = useRouter();
@@ -15,15 +25,8 @@ export default function HomeScreen() {
   useFocusEffect(
     useCallback(() => {
       refreshAccount().catch(() => {});
-    }, [refreshAccount])
+    }, [refreshAccount]),
   );
-
-  function handleLogout() {
-    Alert.alert('বের হবেন?', 'আপনি কি সত্যিই লগআউট করতে চান?', [
-      { text: 'না', style: 'cancel' },
-      { text: 'হ্যাঁ, বের হন', style: 'destructive', onPress: logout },
-    ]);
-  }
 
   return (
     <GradientBackground>
@@ -31,11 +34,21 @@ export default function HomeScreen() {
         <ScrollView contentContainerStyle={styles.content}>
           <View style={styles.premiumHeader}>
             <View style={styles.topBar}>
-              <View style={styles.brandContainer}>
-                <AppText style={styles.brandText}>হালকা ২৬</AppText>
+              <AppLogo size={48} shape="circle" style={styles.brandLogo} />
+              <View style={styles.brandTextBlock}>
+                <AppText style={styles.brandTitle}>তাবলীগ - হালকা ২২৬</AppText>
+                <AppText style={styles.brandSub}>টঙ্গী মারকাজ</AppText>
               </View>
-              <TouchableOpacity onPress={handleLogout} style={styles.logoutBtn}>
-                <AppText style={styles.logoutText}>বের হন</AppText>
+              <TouchableOpacity
+                onPress={() => router.push("/profile")}
+                style={styles.settingsBtn}
+                activeOpacity={0.7}
+              >
+                <Ionicons
+                  name="settings-sharp"
+                  size={24}
+                  color={colors.primary}
+                />
               </TouchableOpacity>
             </View>
 
@@ -46,36 +59,30 @@ export default function HomeScreen() {
           </View>
 
           <BigCard
-            title="নতুন সাথী যোগ করুন"
-            subtitle="জিম্মাদার সাথীর তথ্য যোগ করুন"
-            colors={['#2E86AB', '#48C9B0']}
-            onPress={() => router.push('/add-sathi')}
+            title="নতুন সাথী / ছাত্র যোগ করুন"
+            subtitle="সাথী বা ছাত্র — একটি ফর্মেই যোগ করুন"
+            colors={["#2E86AB", "#A23B72"]}
+            onPress={() => router.push("/add-sathi")}
           />
-          <BigCard
-            title="নতুন ছাত্র যোগ করুন"
-            subtitle="ছাত্রের তথ্য যোগ করুন"
-            colors={['#A23B72', '#E056A0']}
-            onPress={() => router.push('/add-student')}
-          />
-          <BigCard
-            title="সাথী খুঁজুন"
-            subtitle="নাম, ক্লাস, স্কুল দিয়ে খুঁজুন"
-            colors={['#F18F01', '#F7B733']}
-            onPress={() => router.push('/search')}
-          />
+
+          <SearchHubCard isAdmin={!!account?.isAdmin} />
+
           <BigCard
             title="কারগুজারি লিখুন"
             subtitle="সাক্ষাতের মেহনতের কারগুজারি লিখুন"
-            colors={['#6C5CE7', '#A29BFE']}
-            onPress={() => router.push('/karguzari-select')}
+            colors={["#6C5CE7", "#A29BFE"]}
+            onPress={() => router.push("/karguzari-select")}
           />
           {account?.isAdmin ? (
-            <BigCard
-              title="এডমিন"
-              subtitle="এডমিন অ্যাক্সেস ও মসজিদ ব্যবস্থাপনা"
-              colors={['#1B4332', '#40916C']}
-              onPress={() => router.push('/admin')}
-            />
+            <>
+              <BigCard
+                title="ব্যাচ এসএমএস ইতিহাস"
+                subtitle="একসাথে পাঠানো এসএমএস দেখুন ও পুনরায় পাঠান"
+                colors={["#0B5345", "#1ABC9C"]}
+                onPress={() => router.push("/batch-sms-history")}
+              />
+              <AdminHubCard isSuperAdmin={!!account?.isSuperAdmin} />
+            </>
           ) : null}
         </ScrollView>
       </SafeAreaView>
@@ -90,45 +97,57 @@ const styles = StyleSheet.create({
     marginBottom: spacing.md,
   },
   topBar: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
     marginBottom: spacing.md,
   },
-  brandContainer: {
-    backgroundColor: '#FFFFFF',
-    paddingHorizontal: spacing.md,
-    paddingVertical: 6,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: 'rgba(46, 134, 171, 0.2)',
-    ...shadows.card,
+  brandTextBlock: {
+    flex: 1,
+    marginLeft: spacing.sm,
   },
-  brandText: {
-    fontFamily: 'HindSiliguri_700Bold',
-    fontSize: 16,
-    color: colors.primary,
-    letterSpacing: 0.5,
-  },
-  logoutBtn: {
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 4,
-  },
-  logoutText: {
-    fontFamily: 'HindSiliguri_600SemiBold',
-    color: colors.secondary,
+  brandTitle: {
+    fontFamily: "HindSiliguri_700Bold",
     fontSize: 15,
+    color: colors.text,
+    lineHeight: 20,
+  },
+  brandSub: {
+    fontFamily: "HindSiliguri_400Regular",
+    fontSize: 12,
+    color: colors.textLight,
+    marginTop: 1,
+  },
+  brandLogo: {
+    borderWidth: 2,
+    borderColor: 'rgba(46, 134, 171, 0.22)',
+    shadowColor: '#2E86AB',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.12,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  settingsBtn: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: "#FFFFFF",
+    justifyContent: "center",
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "rgba(46, 134, 171, 0.2)",
+    ...shadows.card,
   },
   welcomeSection: {
     paddingHorizontal: 4,
   },
   greet: {
-    fontFamily: 'HindSiliguri_500Medium',
+    fontFamily: "HindSiliguri_500Medium",
     fontSize: 15,
     color: colors.textLight,
   },
   name: {
-    fontFamily: 'HindSiliguri_700Bold',
+    fontFamily: "HindSiliguri_700Bold",
     fontSize: 28,
     color: colors.text,
     marginTop: -6,
