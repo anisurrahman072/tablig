@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import * as SecureStore from 'expo-secure-store';
 import api, { setAuthToken } from '../lib/api';
 
@@ -8,7 +8,9 @@ type Account = {
   houseAddress?: string;
   masjid: string;
   mobile: string;
+  pin?: string;
   isAdmin?: boolean;
+  isSuperAdmin?: boolean;
 };
 
 type AuthContextType = {
@@ -62,51 +64,52 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     })();
   }, []);
 
-  async function persistAuth(newToken: string, newAccount: Account) {
+  const persistAuth = useCallback(async (newToken: string, newAccount: Account) => {
     setToken(newToken);
     setAccount(newAccount);
     setAuthToken(newToken);
     await SecureStore.setItemAsync(TOKEN_KEY, newToken);
     await SecureStore.setItemAsync(ACCOUNT_KEY, JSON.stringify(newAccount));
-  }
+  }, []);
 
-  async function login(mobile: string, pin: string) {
+  const login = useCallback(async (mobile: string, pin: string) => {
     const res = await api.post('/auth/login', { mobile, pin });
     await persistAuth(res.data.data.token, res.data.data.account);
-  }
+  }, [persistAuth]);
 
-  async function signup(data: {
+  const signup = useCallback(async (data: {
     name: string;
     houseAddress?: string;
     masjid: string;
     mobile: string;
     pin: string;
-  }) {
+  }) => {
     const res = await api.post('/auth/signup', data);
     await persistAuth(res.data.data.token, res.data.data.account);
-  }
+  }, [persistAuth]);
 
-  async function logout() {
+  const logout = useCallback(async () => {
     setToken(null);
     setAccount(null);
     setAuthToken(null);
     await SecureStore.deleteItemAsync(TOKEN_KEY);
     await SecureStore.deleteItemAsync(ACCOUNT_KEY);
-  }
+  }, []);
 
-  async function refreshAccount() {
+  const refreshAccount = useCallback(async () => {
     if (!token) return;
     const res = await api.get('/auth/me');
     const fresh = res.data.data as Account;
     setAccount(fresh);
     await SecureStore.setItemAsync(ACCOUNT_KEY, JSON.stringify(fresh));
-  }
+  }, [token]);
 
-  return (
-    <AuthContext.Provider value={{ account, token, loading, login, signup, logout, refreshAccount }}>
-      {children}
-    </AuthContext.Provider>
+  const value = useMemo(
+    () => ({ account, token, loading, login, signup, logout, refreshAccount }),
+    [account, token, loading, login, signup, logout, refreshAccount]
   );
+
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 
 export function useAuth() {

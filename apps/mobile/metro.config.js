@@ -12,4 +12,10 @@ config.resolver.nodeModulesPaths = [
   path.resolve(monorepoRoot, 'node_modules'),
 ];
 
+// TabligApp always uses 8082 so 8081 stays free for ParentingMyKid.
+config.server = {
+  ...config.server,
+  port: 8082,
+};
+
 module.exports = config;

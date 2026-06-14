@@ -10,6 +10,14 @@ const {
   STUDENT_CLASS_OPTIONS,
 } = require('../constants');
 const { isValidMasjid } = require('../utils/masjid');
+const {
+  listDirectoryEntries,
+  getDirectoryEntry,
+  softDeleteDirectoryEntry,
+  resolvePersonForEdit,
+  syncClaimedPersonToAccount,
+  ACTIVE,
+} = require('../utils/directory');
 
 const router = express.Router();
 
@@ -64,18 +72,8 @@ async function validatePersonData(data) {
   return parsed;
 }
 
-function formatPerson(person) {
-  const obj = person.toObject();
-  const claimedById = obj.claimedBy?._id ?? obj.claimedBy;
-  obj.canEdit =
-    !obj.isLocked ||
-    (claimedById != null && String(claimedById) === String(person._viewerId));
-  // Admins can delete anyone. Non-admins can only delete unclaimed records.
-  obj.canDelete = person._isAdmin || !obj.isLocked;
-  return obj;
-}
-
-function canEditPerson(person, accountId) {
+function canEditPerson(person, accountId, isAdmin) {
+  if (isAdmin) return true;
   if (!person.isLocked) return true;
   return person.claimedBy && String(person.claimedBy) === String(accountId);
 }
@@ -97,6 +95,7 @@ router.post('/', async (req, res, next) => {
       fatherName: data.fatherName?.trim() || '',
       fatherMobile: data.fatherMobile ? normalizeMobile(data.fatherMobile) : '',
       createdBy: req.account._id,
+      isDeleted: false,
     });
 
     res.status(201).json({ success: true, data: person });
@@ -110,70 +109,8 @@ router.post('/', async (req, res, next) => {
 
 router.get('/', async (req, res, next) => {
   try {
-    const {
-      q,
-      type,
-      classValue,
-      schoolName,
-      mobile,
-      masjid,
-      page = 1,
-      limit = 20,
-    } = req.query;
-
-    const filter = {};
-
-    if (type && ['sathi', 'student'].includes(type)) {
-      filter.type = type;
-    }
-
-    if (masjid) {
-      filter.masjid = masjid;
-    }
-
-    if (classValue) {
-      filter.classValue = Number(classValue);
-    }
-
-    if (schoolName) {
-      filter.schoolName = { $regex: schoolName, $options: 'i' };
-    }
-
-    if (mobile) {
-      filter.mobile = normalizeMobile(mobile);
-    }
-
-    if (q) {
-      filter.name = { $regex: q, $options: 'i' };
-    }
-
-    const skip = (Number(page) - 1) * Number(limit);
-    const [items, total] = await Promise.all([
-      Person.find(filter)
-        .sort({ updatedAt: -1 })
-        .skip(skip)
-        .limit(Number(limit))
-        .populate('createdBy', 'name')
-        .populate('claimedBy', 'name lastLoginAt'),
-      Person.countDocuments(filter),
-    ]);
-
-    const data = items.map((p) => {
-      p._viewerId = req.account._id;
-      p._isAdmin = req.account.isAdmin;
-      return formatPerson(p);
-    });
-
-    res.json({
-      success: true,
-      data,
-      pagination: {
-        page: Number(page),
-        limit: Number(limit),
-        total,
-        pages: Math.ceil(total / Number(limit)),
-      },
-    });
+    const result = await listDirectoryEntries(req.query, req.account);
+    res.json({ success: true, ...result });
   } catch (err) {
     next(err);
   }
@@ -181,17 +118,11 @@ router.get('/', async (req, res, next) => {
 
 router.get('/:id', async (req, res, next) => {
   try {
-    const person = await Person.findById(req.params.id)
-      .populate('createdBy', 'name')
-      .populate('claimedBy', 'name lastLoginAt');
-
-    if (!person) {
+    const entry = await getDirectoryEntry(req.params.id, req.account);
+    if (!entry) {
       throw new AppError('তথ্য পাওয়া যায়নি', 404);
     }
-
-    person._viewerId = req.account._id;
-    person._isAdmin = req.account.isAdmin;
-    res.json({ success: true, data: formatPerson(person) });
+    res.json({ success: true, data: entry });
   } catch (err) {
     next(err);
   }
@@ -199,12 +130,12 @@ router.get('/:id', async (req, res, next) => {
 
 router.put('/:id', async (req, res, next) => {
   try {
-    const person = await Person.findById(req.params.id);
+    const person = await resolvePersonForEdit(req.params.id);
     if (!person) {
       throw new AppError('তথ্য পাওয়া যায়নি', 404);
     }
 
-    if (!canEditPerson(person, req.account._id)) {
+    if (!canEditPerson(person, req.account._id, req.account.isAdmin)) {
       throw new AppError('এই তথ্য এখন শুধু মালিকই সম্পাদনা করতে পারবেন', 403);
     }
 
@@ -227,10 +158,10 @@ router.put('/:id', async (req, res, next) => {
     }
 
     await person.save();
-    person._viewerId = req.account._id;
-    person._isAdmin = req.account.isAdmin;
+    await syncClaimedPersonToAccount(person);
 
-    res.json({ success: true, data: formatPerson(person) });
+    const entry = await getDirectoryEntry(req.params.id, req.account);
+    res.json({ success: true, data: entry });
   } catch (err) {
     if (err instanceof z.ZodError) {
       return next(new AppError(err.errors[0].message));
@@ -241,16 +172,15 @@ router.put('/:id', async (req, res, next) => {
 
 router.delete('/:id', async (req, res, next) => {
   try {
-    const person = await Person.findById(req.params.id);
-    if (!person) {
+    const result = await softDeleteDirectoryEntry(req.params.id, req.account);
+    if (!result) {
       throw new AppError('তথ্য পাওয়া যায়নি', 404);
     }
-    if (person.isLocked && !req.account.isAdmin) {
-      throw new AppError('দাবিকৃত রেকর্ড মুছে ফেলা যাবে না', 403);
-    }
-    await person.deleteOne();
     res.json({ success: true, message: 'রেকর্ড মুছে ফেলা হয়েছে' });
   } catch (err) {
+    if (err.message === 'FORBIDDEN') {
+      return next(new AppError('দাবিকৃত রেকর্ড মুছে ফেলা যাবে না', 403));
+    }
     next(err);
   }
 });

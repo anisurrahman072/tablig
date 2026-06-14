@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import {
   ScrollView,
   StyleSheet,
-  Alert,
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
@@ -13,6 +12,7 @@ import { ScreenHeader } from '../../components/ScreenHeader';
 import { InputField } from '../../components/InputField';
 import { PrimaryButton } from '../../components/PrimaryButton';
 import api from '../../lib/api';
+import { appAlert } from '../../lib/appAlert';
 import { spacing } from '../../theme';
 
 export default function ForgotPinScreen() {
@@ -22,7 +22,7 @@ export default function ForgotPinScreen() {
 
   async function handleSend() {
     if (!mobile.trim()) {
-      Alert.alert('ত্রুটি', 'মোবাইল নম্বর দিন');
+      appAlert('ত্রুটি', 'মোবাইল নম্বর দিন');
       return;
     }
     try {
@@ -34,7 +34,7 @@ export default function ForgotPinScreen() {
         params: { successMsg: 'আপনার নতুন পিন মোবাইলে পাঠানো হয়েছে' },
       });
     } catch (err: any) {
-      Alert.alert('ত্রুটি', err.message);
+      appAlert('ত্রুটি', err.message);
     } finally {
       setLoading(false);
     }

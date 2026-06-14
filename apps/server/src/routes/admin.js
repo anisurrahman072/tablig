@@ -1,23 +1,31 @@
-const express = require('express');
-const Account = require('../models/Account');
-const Masjid = require('../models/Masjid');
-const School = require('../models/School');
-const { AppError } = require('../utils/errors');
-const { normalizeMobile, isValidBangladeshMobile, formatMobileForDisplay } = require('../utils/mobile');
-const authMiddleware = require('../middleware/auth');
-const adminMiddleware = require('../middleware/admin');
-const { SUPER_ADMIN_MOBILE } = require('../constants/admin');
+const express = require("express");
+const bcrypt = require("bcryptjs");
+const Account = require("../models/Account");
+const Person = require("../models/Person");
+const Masjid = require("../models/Masjid");
+const School = require("../models/School");
+const { AppError } = require("../utils/errors");
+const {
+  normalizeMobile,
+  isValidBangladeshMobile,
+  formatMobileForDisplay,
+} = require("../utils/mobile");
+const authMiddleware = require("../middleware/auth");
+const adminMiddleware = require("../middleware/admin");
+const { getSuperAdminMobile, isSuperAdminMobile } = require("../constants/admin");
+const { ACTIVE, findLinkedPersonByMobile } = require("../utils/directory");
+const { sendAdminGrantedSms } = require("../services/sms");
 
 const router = express.Router();
 
 router.use(authMiddleware);
 router.use(adminMiddleware);
 
-router.get('/admins', async (req, res, next) => {
+router.get("/admins", async (req, res, next) => {
   try {
     const admins = await Account.find({ isAdmin: true })
       .sort({ name: 1 })
-      .select('name mobile');
+      .select("name mobile");
 
     res.json({
       success: true,
@@ -26,36 +34,127 @@ router.get('/admins', async (req, res, next) => {
         name: a.name,
         mobile: a.mobile,
         displayMobile: formatMobileForDisplay(a.mobile),
-        isSuperAdmin: a.mobile === SUPER_ADMIN_MOBILE,
+        isSuperAdmin: isSuperAdminMobile(a.mobile),
       })),
+      meta: {
+        canRevokeAdmin: isSuperAdminMobile(req.account.mobile),
+      },
     });
   } catch (err) {
     next(err);
   }
 });
 
-router.post('/admins', async (req, res, next) => {
+function generatePin() {
+  return String(Math.floor(1000 + Math.random() * 9000));
+}
+
+async function resolveGrantTarget({ mobile: rawMobile, personId }) {
+  let person = null;
+  let mobile = rawMobile ? normalizeMobile(rawMobile) : "";
+
+  if (personId) {
+    person = await Person.findOne({ _id: personId, isDeleted: ACTIVE });
+    if (!person) {
+      throw new AppError("ব্যক্তি পাওয়া যায়নি", 404);
+    }
+    if (person.mobile) {
+      mobile = normalizeMobile(person.mobile);
+    }
+  }
+
+  if (!mobile) {
+    throw new AppError("মোবাইল নম্বর পাওয়া যায়নি");
+  }
+
+  if (!isValidBangladeshMobile(mobile)) {
+    throw new AppError("সঠিক বাংলাদেশি মোবাইল নম্বর দিন");
+  }
+
+  if (!person) {
+    person = await findLinkedPersonByMobile(mobile);
+  }
+
+  return { mobile, person };
+}
+
+async function ensureAccountForAdminGrant({ mobile, person }) {
+  let account = await Account.findOne({ mobile });
+  let pin = null;
+  let created = false;
+
+  if (!account) {
+    const defaultMasjid =
+      person?.masjid || (await Masjid.findOne().sort({ name: 1 }))?.name;
+    if (!defaultMasjid) {
+      throw new AppError("কোনো মসজিদ পাওয়া যায়নি");
+    }
+
+    pin = generatePin();
+    const pinHash = await bcrypt.hash(pin, 10);
+    account = await Account.create({
+      name: person?.name?.trim() || "ব্যবহারকারী",
+      houseAddress: person?.houseLocation?.trim() || "",
+      masjid: defaultMasjid,
+      mobile,
+      pinHash,
+      pinPlain: pin,
+      isAdmin: true,
+    });
+    created = true;
+
+    const unclaimedPersons = await Person.find({
+      mobile,
+      isDeleted: ACTIVE,
+      claimedBy: null,
+    });
+    for (const unclaimed of unclaimedPersons) {
+      unclaimed.claimedBy = account._id;
+      unclaimed.isLocked = true;
+      await unclaimed.save();
+    }
+
+    return { account, pin, created };
+  }
+
+  if (account.isAdmin) {
+    throw new AppError("এই মোবাইল ইতিমধ্যে এডমিন");
+  }
+
+  pin = account.pinPlain || generatePin();
+  if (!account.pinPlain) {
+    account.pinHash = await bcrypt.hash(pin, 10);
+    account.pinPlain = pin;
+  }
+
+  account.isAdmin = true;
+  await account.save();
+
+  return { account, pin, created };
+}
+
+router.post("/admins", async (req, res, next) => {
   try {
-    const mobile = normalizeMobile(req.body.mobile || '');
-    if (!isValidBangladeshMobile(mobile)) {
-      throw new AppError('সঠিক বাংলাদেশি মোবাইল নম্বর দিন');
+    const { mobile: rawMobile, personId } = req.body || {};
+    if (!rawMobile && !personId) {
+      throw new AppError("মোবাইল নম্বর বা ব্যক্তি নির্বাচন করুন");
     }
 
-    const account = await Account.findOne({ mobile });
-    if (!account) {
-      throw new AppError('এই মোবাইলে কোনো অ্যাকাউন্ট নেই। প্রথমে অ্যাকাউন্ট তৈরি করতে হবে');
-    }
+    const { mobile, person } = await resolveGrantTarget({
+      mobile: rawMobile,
+      personId,
+    });
+    const { account, pin } = await ensureAccountForAdminGrant({ mobile, person });
 
-    if (account.isAdmin) {
-      throw new AppError('এই মোবাইল ইতিমধ্যে এডমিন');
+    try {
+      await sendAdminGrantedSms(mobile, pin);
+    } catch (smsErr) {
+      console.error("[এডমিন] SMS পাঠাতে ব্যর্থ:", smsErr.message);
     }
-
-    account.isAdmin = true;
-    await account.save();
 
     res.json({
       success: true,
-      message: 'এডমিন অ্যাক্সেস দেওয়া হয়েছে',
+      message: "এডমিন অ্যাক্সেস দেওয়া হয়েছে এবং SMS পাঠানো হয়েছে",
       data: {
         id: account._id,
         name: account.name,
@@ -68,28 +167,32 @@ router.post('/admins', async (req, res, next) => {
   }
 });
 
-router.delete('/admins/:mobile', async (req, res, next) => {
+router.delete("/admins/:mobile", async (req, res, next) => {
   try {
-    const mobile = normalizeMobile(req.params.mobile || '');
-    if (mobile === SUPER_ADMIN_MOBILE) {
-      throw new AppError('প্রধান এডমিনের অ্যাক্সেস বাতিল করা যাবে না');
+    if (!isSuperAdminMobile(req.account.mobile)) {
+      throw new AppError("শুধু প্রধান এডমিন এডমিন অ্যাক্সেস বাতিল করতে পারবেন", 403);
+    }
+
+    const mobile = normalizeMobile(req.params.mobile || "");
+    if (isSuperAdminMobile(mobile)) {
+      throw new AppError("প্রধান এডমিনের অ্যাক্সেস বাতিল করা যাবে না");
     }
 
     const account = await Account.findOne({ mobile });
     if (!account || !account.isAdmin) {
-      throw new AppError('এডমিন পাওয়া যায়নি', 404);
+      throw new AppError("এডমিন পাওয়া যায়নি", 404);
     }
 
     account.isAdmin = false;
     await account.save();
 
-    res.json({ success: true, message: 'এডমিন অ্যাক্সেস বাতিল করা হয়েছে' });
+    res.json({ success: true, message: "এডমিন অ্যাক্সেস বাতিল করা হয়েছে" });
   } catch (err) {
     next(err);
   }
 });
 
-router.get('/masjids', async (req, res, next) => {
+router.get("/masjids", async (req, res, next) => {
   try {
     const masjids = await Masjid.find().sort({ name: 1 });
     res.json({
@@ -101,57 +204,57 @@ router.get('/masjids', async (req, res, next) => {
   }
 });
 
-router.post('/masjids', async (req, res, next) => {
+router.post("/masjids", async (req, res, next) => {
   try {
-    const name = String(req.body.name || '').trim();
+    const name = String(req.body.name || "").trim();
     if (name.length < 2) {
-      throw new AppError('মসজিদের নাম দিন');
+      throw new AppError("মসজিদের নাম দিন");
     }
 
     const existing = await Masjid.findOne({ name });
     if (existing) {
-      throw new AppError('এই মসজিদ ইতিমধ্যে আছে');
+      throw new AppError("এই মসজিদ ইতিমধ্যে আছে");
     }
 
     const masjid = await Masjid.create({ name });
 
     res.status(201).json({
       success: true,
-      message: 'মসজিদ যোগ করা হয়েছে',
+      message: "মসজিদ যোগ করা হয়েছে",
       data: { id: masjid._id, name: masjid.name },
     });
   } catch (err) {
     if (err.code === 11000) {
-      return next(new AppError('এই মসজিদ ইতিমধ্যে আছে'));
+      return next(new AppError("এই মসজিদ ইতিমধ্যে আছে"));
     }
     next(err);
   }
 });
 
-router.delete('/masjids/:id', async (req, res, next) => {
+router.delete("/masjids/:id", async (req, res, next) => {
   try {
     const masjid = await Masjid.findById(req.params.id);
     if (!masjid) {
-      throw new AppError('মসজিদ পাওয়া যায়নি', 404);
+      throw new AppError("মসজিদ পাওয়া যায়নি", 404);
     }
 
     const totalMasjids = await Masjid.countDocuments();
     if (totalMasjids <= 1) {
-      throw new AppError('কমপক্ষে একটি মসজিদ থাকতে হবে');
+      throw new AppError("কমপক্ষে একটি মসজিদ থাকতে হবে");
     }
 
     await masjid.deleteOne();
 
-    res.json({ success: true, message: 'মসজিদ মুছে ফেলা হয়েছে' });
+    res.json({ success: true, message: "মসজিদ মুছে ফেলা হয়েছে" });
   } catch (err) {
     next(err);
   }
 });
 
 // ── Schools ──────────────────────────────────────────────
-router.get('/schools', async (req, res, next) => {
+router.get("/schools", async (req, res, next) => {
   try {
-    const schools = await School.find().sort({ name: 1 });
+    const schools = await School.find({ isDeleted: ACTIVE }).sort({ name: 1 });
     res.json({
       success: true,
       data: schools.map((s) => ({ id: s._id, name: s.name })),
@@ -161,43 +264,54 @@ router.get('/schools', async (req, res, next) => {
   }
 });
 
-router.post('/schools', async (req, res, next) => {
+router.post("/schools", async (req, res, next) => {
   try {
-    const name = String(req.body.name || '').trim();
+    const name = String(req.body.name || "").trim();
     if (name.length < 2) {
-      throw new AppError('স্কুলের নাম দিন');
+      throw new AppError("স্কুলের নাম দিন");
     }
 
     const existing = await School.findOne({ name });
     if (existing) {
-      throw new AppError('এই স্কুল ইতিমধ্যে আছে');
+      if (existing.isDeleted) {
+        existing.isDeleted = false;
+        await existing.save();
+        return res.status(201).json({
+          success: true,
+          message: "স্কুল যোগ করা হয়েছে",
+          data: { id: existing._id, name: existing.name },
+        });
+      }
+      throw new AppError("এই স্কুল ইতিমধ্যে আছে");
     }
 
     const school = await School.create({ name });
 
     res.status(201).json({
       success: true,
-      message: 'স্কুল যোগ করা হয়েছে',
+      message: "স্কুল যোগ করা হয়েছে",
       data: { id: school._id, name: school.name },
     });
   } catch (err) {
     if (err.code === 11000) {
-      return next(new AppError('এই স্কুল ইতিমধ্যে আছে'));
+      return next(new AppError("এই স্কুল ইতিমধ্যে আছে"));
     }
     next(err);
   }
 });
 
-router.delete('/schools/:id', async (req, res, next) => {
+router.delete("/schools/:id", async (req, res, next) => {
   try {
-    const school = await School.findById(req.params.id);
+    const school = await School.findOneAndUpdate(
+      { _id: req.params.id, isDeleted: ACTIVE },
+      { $set: { isDeleted: true } },
+      { new: true },
+    );
     if (!school) {
-      throw new AppError('স্কুল পাওয়া যায়নি', 404);
+      throw new AppError("স্কুল পাওয়া যায়নি", 404);
     }
 
-    await school.deleteOne();
-
-    res.json({ success: true, message: 'স্কুল মুছে ফেলা হয়েছে' });
+    res.json({ success: true, message: "স্কুল মুছে ফেলা হয়েছে" });
   } catch (err) {
     next(err);
   }
