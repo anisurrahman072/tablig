@@ -51,11 +51,6 @@ export function AdminGrantUserSearch({
       return;
     }
 
-    if (adminMobiles.has(item.mobile)) {
-      appAlert("ত্রুটি", "এই ব্যক্তি ইতিমধ্যে এডমিন");
-      return;
-    }
-
     appAlert(
       "এডমিন করুন",
       `${item.name} (${displayMobile(item.mobile)}) কে এডমিন করবেন? তাকে SMS-এ পিন পাঠানো হবে।`,
@@ -63,7 +58,14 @@ export function AdminGrantUserSearch({
         { text: "না", style: "cancel" },
         {
           text: "হ্যাঁ, এডমিন করুন",
-          onPress: () => grantAdmin({ personId: item._id, mobile: item.mobile }),
+          onPress: () => {
+            const personId =
+              item.source === "account" ? item.personId : item._id;
+            grantAdmin({
+              ...(personId ? { personId } : {}),
+              mobile: item.mobile,
+            });
+          },
         },
       ],
     );
@@ -137,7 +139,7 @@ export function AdminGrantUserSearch({
                 <AppText style={styles.noMobile}>মোবাইল নম্বর নেই</AppText>
               ) : null}
             </View>
-            {!alreadyAdmin && item.mobile ? (
+            {!noMobile ? (
               <TouchableOpacity
                 style={[styles.grantBtn, granting && styles.grantBtnDisabled]}
                 onPress={() => confirmGrant(item)}

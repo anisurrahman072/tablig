@@ -46,11 +46,11 @@ yarn server
 3. Build: `yarn install`
 4. Start: `yarn start`
 5. Environment Variables:
-   - `MONGODB_URI`
-   - `JWT_SECRET`
-   - `JWT_RESET_SECRET`
-   - `SMS_API_KEY` (ঐচ্ছিক)
-   - `SMS_PROVIDER` (`bulksmsbd` বা `sslwireless`)
+  - `MONGODB_URI`
+  - `JWT_SECRET`
+  - `JWT_RESET_SECRET`
+  - `SMS_API_KEY` (ঐচ্ছিক)
+  - `SMS_PROVIDER` (`bulksmsbd` বা `sslwireless`)
 
 ## মোবাইল অ্যাপ চালানো
 
@@ -114,7 +114,7 @@ yarn mobile
 
 ```bash
 cd apps/mobile/android
-./gradlew assembleRelease
+./gradlew clean assembleRelease
 ```
 
 **APK যেখানে পড়ে:**
@@ -131,17 +131,19 @@ adb install apps/mobile/android/app/build/outputs/apk/release/app-release.apk
 
 ## API এন্ডপয়েন্ট
 
-| মেথড | পাথ | বিবরণ |
-|------|-----|--------|
-| POST | `/api/auth/signup` | সাইন আপ |
-| POST | `/api/auth/login` | লগইন (মোবাইল + পিন) |
-| POST | `/api/auth/forgot-pin` | ওটিপি পাঠান |
-| POST | `/api/auth/verify-otp` | ওটিপি যাচাই |
-| POST | `/api/auth/reset-pin` | পিন রিসেট |
-| GET | `/api/masjids` | মসজিদ তালিকা |
-| GET | `/api/constants` | ড্রপডাউন মান |
-| POST/GET/PUT | `/api/persons` | সাথী/ছাত্র CRUD |
-| GET/POST | `/api/persons/:id/karguzari` | কারগুজারি |
+
+| মেথড         | পাথ                          | বিবরণ               |
+| ------------ | ---------------------------- | ------------------- |
+| POST         | `/api/auth/signup`           | সাইন আপ             |
+| POST         | `/api/auth/login`            | লগইন (মোবাইল + পিন) |
+| POST         | `/api/auth/forgot-pin`       | ওটিপি পাঠান         |
+| POST         | `/api/auth/verify-otp`       | ওটিপি যাচাই         |
+| POST         | `/api/auth/reset-pin`        | পিন রিসেট           |
+| GET          | `/api/masjids`               | মসজিদ তালিকা        |
+| GET          | `/api/constants`             | ড্রপডাউন মান        |
+| POST/GET/PUT | `/api/persons`               | সাথী/ছাত্র CRUD     |
+| GET/POST     | `/api/persons/:id/karguzari` | কারগুজারি           |
+
 
 ## এসএমএস (পিন রিকভারি)
 
@@ -156,3 +158,4 @@ adb install apps/mobile/android/app/build/outputs/apk/release/app-release.apk
 - সাথী খুঁজুন (নাম, ক্লাস, স্কুল, মোবাইল, মসজিদ)
 - মেহনতের কারগুজারি যোগ ও দেখা
 - সম্পূর্ণ বাংলা UI
+

@@ -56,9 +56,15 @@ async function resolveGrantTarget({ mobile: rawMobile, personId }) {
   if (personId) {
     person = await Person.findOne({ _id: personId, isDeleted: ACTIVE });
     if (!person) {
-      throw new AppError("ব্যক্তি পাওয়া যায়নি", 404);
-    }
-    if (person.mobile) {
+      // Directory account entries use Account._id as _id; the client may send that as personId.
+      const account = await Account.findOne({ _id: personId, isDeleted: ACTIVE });
+      if (account) {
+        mobile = normalizeMobile(account.mobile) || mobile;
+        person = await findLinkedPersonByMobile(mobile, account._id);
+      } else if (!mobile) {
+        throw new AppError("ব্যক্তি পাওয়া যায়নি", 404);
+      }
+    } else if (person.mobile) {
       mobile = normalizeMobile(person.mobile);
     }
   }
@@ -118,7 +124,13 @@ async function ensureAccountForAdminGrant({ mobile, person }) {
   }
 
   if (account.isAdmin) {
-    throw new AppError("এই মোবাইল ইতিমধ্যে এডমিন");
+    pin = account.pinPlain || generatePin();
+    if (!account.pinPlain) {
+      account.pinHash = await bcrypt.hash(pin, 10);
+      account.pinPlain = pin;
+      await account.save();
+    }
+    return { account, pin, created: false };
   }
 
   pin = account.pinPlain || generatePin();
