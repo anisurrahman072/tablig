@@ -800,6 +800,13 @@ async function softDeleteDirectoryEntry(id, viewer) {
     }
     account.isDeleted = true;
     await account.save();
+    // Cascade: soft-delete all Person records claimed by this account so they
+    // don't linger as ghost entries in the directory and cannot be auto-recreated
+    // by ensurePersonForAccount on subsequent karguzari/profile requests.
+    await Person.updateMany(
+      { claimedBy: account._id, isDeleted: false },
+      { $set: { isDeleted: true } },
+    );
     return { source: 'account' };
   }
 
@@ -821,24 +828,44 @@ async function softDeleteDirectoryEntry(id, viewer) {
  * Finds the Person linked to an Account, creating one automatically if none exists.
  * This ensures Account-only users (no pre-existing Person in the directory) can
  * participate in the karguzari system (as attendees, profile sections, etc.).
- * The auto-created Person is linked via claimedBy so it is found on subsequent calls
- * without creating duplicates.
+ *
+ * Uses a MongoDB atomic upsert ($setOnInsert) to prevent the race condition where
+ * multiple concurrent requests (e.g. parallel karguzari tab fetches right after
+ * signup) each see "no linked Person" and then all proceed to Person.create(),
+ * resulting in duplicate Person documents for the same account.
  */
 async function ensurePersonForAccount(account) {
+  // First check by mobile or claimedBy — handles the case where a pre-existing
+  // Person is linked by mobile but doesn't have claimedBy set yet.
   const existing = await findLinkedPersonForAccount(account);
   if (existing) return existing;
 
-  return Person.create({
-    type: 'sathi',
-    name: account.name,
-    masjid: account.masjid,
-    mobile: account.mobile,
-    houseLocation: account.houseAddress?.trim() || '',
-    createdBy: account._id,
-    claimedBy: account._id,
-    isLocked: true,
-    isDeleted: false,
-  });
+  // Guard: if a Person was explicitly deleted for this account, do not auto-recreate it.
+  // Without this check, any karguzari or profile request after a soft-delete would
+  // silently create a fresh Person with isDeleted:false, undoing the delete.
+  const deletedPersonExists = await Person.exists({ claimedBy: account._id, isDeleted: true });
+  if (deletedPersonExists) return null;
+
+  // Atomic upsert: only one concurrent caller will insert the new document;
+  // any other concurrent caller will find the document just created.
+  const person = await Person.findOneAndUpdate(
+    { claimedBy: account._id, isDeleted: false },
+    {
+      $setOnInsert: {
+        type: 'sathi',
+        name: account.name,
+        masjid: account.masjid,
+        mobile: account.mobile,
+        houseLocation: account.houseAddress?.trim() || '',
+        createdBy: account._id,
+        isLocked: true,
+        isDeleted: false,
+      },
+    },
+    { upsert: true, new: true },
+  ).populate(personPopulate);
+
+  return person;
 }
 
 async function resolvePersonForKarguzari(id) {

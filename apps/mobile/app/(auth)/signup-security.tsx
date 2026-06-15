@@ -143,32 +143,22 @@ export default function SignupSecurityScreen() {
           <ScreenHeader title="অ্যাডমিন অনুমোদন" />
 
           <View style={styles.heroCard}>
-            <LinearGradient
-              colors={['rgba(46,134,171,0.12)', 'rgba(162,59,114,0.08)', 'rgba(241,143,1,0.06)']}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={styles.heroGradient}
-            >
-              <View style={styles.curveTop} />
-              <View style={styles.curveBottom} />
+            <View style={styles.iconRing}>
+              <LinearGradient
+                colors={[colors.primary, colors.secondary]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.iconGradient}
+              >
+                <Ionicons name="shield-checkmark" size={42} color="#fff" />
+              </LinearGradient>
+            </View>
 
-              <View style={styles.iconRing}>
-                <LinearGradient
-                  colors={[colors.primary, colors.secondary]}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 1 }}
-                  style={styles.iconGradient}
-                >
-                  <Ionicons name="shield-checkmark" size={42} color="#fff" />
-                </LinearGradient>
-              </View>
-
-              <AppText style={styles.heroTitle}>অ্যাডমিন যাচাইকরণ</AppText>
-              <AppText style={styles.heroBody}>
-                আপনার তথ্য নিরাপদে জমা হয়েছে। অ্যাকাউন্ট তৈরি করতে সুপার অ্যাডমিনের অনুমোদন
-                প্রয়োজন।
-              </AppText>
-            </LinearGradient>
+            <AppText style={styles.heroTitle}>অ্যাডমিন যাচাইকরণ</AppText>
+            <AppText style={styles.heroBody}>
+              আপনার তথ্য নিরাপদে জমা হয়েছে। অ্যাকাউন্ট তৈরি করতে সুপার অ্যাডমিনের অনুমোদন
+              প্রয়োজন।
+            </AppText>
           </View>
 
           <View style={styles.infoCard}>
@@ -180,7 +170,7 @@ export default function SignupSecurityScreen() {
           <View style={styles.instructionCard}>
             <AppText style={styles.instructionText}>
               আপনার তথ্য নিশ্চিত করতে সুপার অ্যাডমিনকে কল করুন। সুপার অ্যাডমিনের মোবাইল নম্বর{' '}
-              <AppText style={styles.highlight}>{adminNumber}</AppText> — এই নম্বরে SMS গেছে।
+              <AppText style={styles.highlight}>{adminNumber}</AppText> — এই নম্বরে SMS গিয়েছে।
               সুপার অ্যাডমিনকে কল করে OTP জেনে নিন এবং এখানে লিখুন।
             </AppText>
           </View>
@@ -245,34 +235,14 @@ const styles = StyleSheet.create({
     marginBottom: spacing.md,
   },
   heroCard: {
+    backgroundColor: colors.card,
     borderRadius: radius.xl,
-    overflow: 'hidden',
-    marginBottom: spacing.lg,
-    ...shadows.card,
-  },
-  heroGradient: {
     padding: spacing.lg,
     alignItems: 'center',
-    position: 'relative',
-    overflow: 'hidden',
-  },
-  curveTop: {
-    position: 'absolute',
-    top: -40,
-    right: -30,
-    width: 140,
-    height: 140,
-    borderRadius: 70,
-    backgroundColor: 'rgba(46,134,171,0.15)',
-  },
-  curveBottom: {
-    position: 'absolute',
-    bottom: -50,
-    left: -20,
-    width: 160,
-    height: 160,
-    borderRadius: 80,
-    backgroundColor: 'rgba(162,59,114,0.12)',
+    marginBottom: spacing.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    ...shadows.card,
   },
   iconRing: {
     marginBottom: spacing.md,

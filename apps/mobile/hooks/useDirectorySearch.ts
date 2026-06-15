@@ -89,6 +89,13 @@ export function useDirectorySearch(options: Options = {}) {
   const [searched, setSearched] = useState(false);
   const loadingMoreRef = useRef(false);
   const fetchIdRef = useRef(0);
+  const filtersRef = useRef(filters);
+  const pageRef = useRef(page);
+
+  useEffect(() => {
+    filtersRef.current = filters;
+    pageRef.current = page;
+  }, [filters, page]);
 
   const fetchPage = useCallback(
     async (pageNumber: number, nextFilters = filters) => {
@@ -141,6 +148,38 @@ export function useDirectorySearch(options: Options = {}) {
     [filters, requireQuery, withKarguzari],
   );
 
+  const silentRefresh = useCallback(async () => {
+    const currentFilters = filtersRef.current;
+    const currentPage = pageRef.current;
+
+    if (requireQuery && !hasSearchCriteria(currentFilters)) {
+      return;
+    }
+
+    const fetchId = ++fetchIdRef.current;
+
+    try {
+      const allResults: DirectoryEntry[] = [];
+      let lastPagination: { total?: number; pages?: number } | null = null;
+
+      for (let p = 1; p <= currentPage; p++) {
+        const res = await api.get("/persons", {
+          params: buildParams(p, currentFilters, withKarguzari),
+        });
+        if (fetchId !== fetchIdRef.current) return;
+        allResults.push(...(res.data.data ?? []));
+        lastPagination = res.data.pagination;
+      }
+
+      setResults(allResults);
+      setTotal(lastPagination?.total ?? 0);
+      setHasMore(currentPage < (lastPagination?.pages ?? 1));
+      setSearched(true);
+    } catch {
+      // Keep existing results on silent refresh failure.
+    }
+  }, [requireQuery, withKarguzari]);
+
   useEffect(() => {
     const timer = setTimeout(() => fetchPage(1), 400);
     return () => clearTimeout(timer);
@@ -192,5 +231,6 @@ export function useDirectorySearch(options: Options = {}) {
     loadMore,
     resetFilters,
     removeResult,
+    silentRefresh,
   };
 }

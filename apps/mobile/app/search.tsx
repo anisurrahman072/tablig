@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   StyleSheet,
   View,
@@ -13,7 +13,7 @@ import {
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
-import { useRouter, useLocalSearchParams } from "expo-router";
+import { useRouter, useLocalSearchParams, useFocusEffect } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { BackButton } from "../components/BackButton";
 import { GradientBackground } from "../components/GradientBackground";
@@ -75,7 +75,19 @@ export default function SearchScreen() {
     clearFilters,
     loadMore,
     removeResult,
+    silentRefresh,
   } = useDirectorySearch({ initialFilters });
+  const isFirstFocus = useRef(true);
+
+  useFocusEffect(
+    useCallback(() => {
+      if (isFirstFocus.current) {
+        isFirstFocus.current = false;
+        return;
+      }
+      silentRefresh();
+    }, [silentRefresh]),
+  );
   const [masjids, setMasjids] = useState<string[]>([]);
   const [schools, setSchools] = useState<string[]>([]);
   const [showFilters, setShowFilters] = useState(params.openFilters === "1");
