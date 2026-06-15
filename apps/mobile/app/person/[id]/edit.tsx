@@ -16,6 +16,7 @@ import {
   MASTURAT_DAYS_OPTIONS,
   STUDENT_CLASS_OPTIONS,
 } from '../../../constants/options';
+import { buildMasjidSelectOptions } from '../../../lib/masjid';
 import { spacing } from '../../../theme';
 
 export default function EditPersonScreen() {
@@ -96,7 +97,7 @@ export default function EditPersonScreen() {
             label="কাছের মসজিদ *"
             value={form.masjid || null}
             onValueChange={(v) => update('masjid', v)}
-            options={masjids.map((m) => ({ label: m, value: m }))}
+            options={buildMasjidSelectOptions(masjids)}
           />
           <InputField
             label="বাসার লোকেশন"

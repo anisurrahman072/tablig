@@ -4,11 +4,12 @@ import {
   StyleSheet,
   View,
   TouchableOpacity,
-  KeyboardAvoidingView,
-  Platform,
   RefreshControl,
+  TextInput,
 } from "react-native";
 import { useFocusEffect, useLocalSearchParams } from "expo-router";
+import { Ionicons } from "@expo/vector-icons";
+import { LinearGradient } from "expo-linear-gradient";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "../context/AuthContext";
 import { GradientBackground } from "../components/GradientBackground";
@@ -17,6 +18,10 @@ import { InputField } from "../components/InputField";
 import { PrimaryButton } from "../components/PrimaryButton";
 import { AdminGrantUserSearch } from "../components/AdminGrantUserSearch";
 import { AppText } from "../components/AppText";
+import {
+  KeyboardFormScroll,
+  useScrollOnInputFocus,
+} from "../components/KeyboardFormScroll";
 import api from "../lib/api";
 import { appAlert } from "../lib/appAlert";
 import { displayMobile } from "../lib/mobile";
@@ -40,13 +45,88 @@ type SchoolItem = {
   name: string;
 };
 
+type AdminTab = "access" | "masjid" | "school";
+
+const ADMIN_TABS: {
+  id: AdminTab;
+  label: string;
+  icon: keyof typeof Ionicons.glyphMap;
+  activeGradient: [string, string];
+  activeBorder: string;
+  activeText: string;
+  activeIcon: string;
+  inactiveBg: string;
+}[] = [
+  {
+    id: "access",
+    label: "এডমিন অ্যাক্সেস",
+    icon: "shield-checkmark-outline",
+    activeGradient: ["#E8F4FA", "#D4EBF7"],
+    activeBorder: "#2E86AB",
+    activeText: "#1A5276",
+    activeIcon: "#2E86AB",
+    inactiveBg: "#F7FBFF",
+  },
+  {
+    id: "masjid",
+    label: "মসজিদ ব্যবস্থাপনা",
+    icon: "business-outline",
+    activeGradient: ["#E8F8F5", "#D5F0E8"],
+    activeBorder: "#40916C",
+    activeText: "#1B4332",
+    activeIcon: "#2D6A4F",
+    inactiveBg: "#F4FBF8",
+  },
+  {
+    id: "school",
+    label: "স্কুল ব্যবস্থাপনা",
+    icon: "school-outline",
+    activeGradient: ["#F3E8FF", "#E8DAFF"],
+    activeBorder: "#A23B72",
+    activeText: "#6B2D5C",
+    activeIcon: "#A23B72",
+    inactiveBg: "#FFF8FC",
+  },
+];
+
+function sectionToTab(section?: string): AdminTab {
+  if (section === "masjid") return "masjid";
+  if (section === "school") return "school";
+  return "access";
+}
+
+function InlineEditInput({
+  value,
+  onChangeText,
+  placeholder,
+}: {
+  value: string;
+  onChangeText: (text: string) => void;
+  placeholder: string;
+}) {
+  const wrapRef = useRef<View>(null);
+  const scrollIntoView = useScrollOnInputFocus();
+
+  return (
+    <View ref={wrapRef}>
+      <TextInput
+        style={styles.editInput}
+        value={value}
+        onChangeText={onChangeText}
+        placeholder={placeholder}
+        placeholderTextColor={colors.textLight}
+        autoFocus
+        onFocus={() => scrollIntoView?.(wrapRef)}
+      />
+    </View>
+  );
+}
+
 export default function AdminScreen() {
   const { account } = useAuth();
   const { section } = useLocalSearchParams<{ section?: string }>();
   const isSuperAdmin = !!account?.isSuperAdmin;
-  const scrollRef = useRef<ScrollView>(null);
-  const sectionOffsets = useRef<Record<string, number>>({});
-  const grantSectionY = useRef(0);
+  const [activeTab, setActiveTab] = useState<AdminTab>(() => sectionToTab(section));
   const [admins, setAdmins] = useState<AdminItem[]>([]);
   const [masjids, setMasjids] = useState<MasjidItem[]>([]);
   const [schools, setSchools] = useState<SchoolItem[]>([]);
@@ -57,6 +137,27 @@ export default function AdminScreen() {
   const [loadingMasjids, setLoadingMasjids] = useState(false);
   const [loadingSchools, setLoadingSchools] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [editingMasjidId, setEditingMasjidId] = useState<string | null>(null);
+  const [editMasjidName, setEditMasjidName] = useState("");
+  const [editingSchoolId, setEditingSchoolId] = useState<string | null>(null);
+  const [editSchoolName, setEditSchoolName] = useState("");
+  const tabBarRef = useRef<ScrollView>(null);
+  const tabBarWidth = useRef(0);
+  const tabLayouts = useRef<Partial<Record<AdminTab, { x: number; width: number }>>>(
+    {},
+  );
+
+  const scrollTabToCenter = useCallback((tab: AdminTab) => {
+    const layout = tabLayouts.current[tab];
+    const viewport = tabBarWidth.current;
+    if (!layout || !viewport) return;
+
+    const targetX = layout.x + layout.width / 2 - viewport / 2;
+    tabBarRef.current?.scrollTo({
+      x: Math.max(0, targetX),
+      animated: true,
+    });
+  }, []);
 
   const load = useCallback(async () => {
     const [adminRes, masjidRes, schoolRes] = await Promise.all([
@@ -76,18 +177,22 @@ export default function AdminScreen() {
   );
 
   useEffect(() => {
-    if (!section) return;
-    const timer = setTimeout(() => {
-      const y = sectionOffsets.current[section];
-      if (y != null) {
-        scrollRef.current?.scrollTo({ y: Math.max(0, y - 12), animated: true });
-      }
-    }, 350);
-    return () => clearTimeout(timer);
-  }, [section, admins.length, masjids.length, schools.length]);
+    setActiveTab(sectionToTab(section));
+  }, [section]);
 
-  function markSection(key: string, y: number) {
-    sectionOffsets.current[key] = y;
+  useEffect(() => {
+    const timer = setTimeout(() => scrollTabToCenter(activeTab), 60);
+    return () => clearTimeout(timer);
+  }, [activeTab, scrollTabToCenter]);
+
+  function switchTab(tab: AdminTab) {
+    setActiveTab(tab);
+    cancelEditMasjid();
+    cancelEditSchool();
+  }
+
+  function handleTabLayout(tab: AdminTab, x: number, width: number) {
+    tabLayouts.current[tab] = { x, width };
   }
 
   async function onRefresh() {
@@ -197,6 +302,40 @@ export default function AdminScreen() {
     }
   }
 
+  function startEditMasjid(item: MasjidItem) {
+    setEditingMasjidId(item.id);
+    setEditMasjidName(item.name);
+  }
+
+  function cancelEditMasjid() {
+    setEditingMasjidId(null);
+    setEditMasjidName("");
+  }
+
+  async function saveEditMasjid(item: MasjidItem) {
+    const name = editMasjidName.trim();
+    if (!name) {
+      appAlert("ত্রুটি", "মসজিদের নাম দিন");
+      return;
+    }
+    if (name === item.name) {
+      cancelEditMasjid();
+      return;
+    }
+
+    try {
+      setLoadingMasjids(true);
+      await api.patch(`/admin/masjids/${item.id}`, { name });
+      cancelEditMasjid();
+      await load();
+      appAlert("সফল", "মসজিদের নাম আপডেট করা হয়েছে");
+    } catch (err: any) {
+      appAlert("ত্রুটি", err.message || "মসজিদের নাম আপডেট করা যায়নি");
+    } finally {
+      setLoadingMasjids(false);
+    }
+  }
+
   async function handleAddSchool() {
     if (!schoolName.trim()) {
       appAlert("ত্রুটি", "স্কুলের নাম দিন");
@@ -236,31 +375,131 @@ export default function AdminScreen() {
     }
   }
 
+  function startEditSchool(item: SchoolItem) {
+    setEditingSchoolId(item.id);
+    setEditSchoolName(item.name);
+  }
+
+  function cancelEditSchool() {
+    setEditingSchoolId(null);
+    setEditSchoolName("");
+  }
+
+  async function saveEditSchool(item: SchoolItem) {
+    const name = editSchoolName.trim();
+    if (!name) {
+      appAlert("ত্রুটি", "স্কুলের নাম দিন");
+      return;
+    }
+    if (name === item.name) {
+      cancelEditSchool();
+      return;
+    }
+
+    try {
+      setLoadingSchools(true);
+      await api.patch(`/admin/schools/${item.id}`, { name });
+      cancelEditSchool();
+      await load();
+      appAlert("সফল", "স্কুলের নাম আপডেট করা হয়েছে");
+    } catch (err: any) {
+      appAlert("ত্রুটি", err.message || "স্কুলের নাম আপডেট করা যায়নি");
+    } finally {
+      setLoadingSchools(false);
+    }
+  }
+
   return (
     <GradientBackground>
       <SafeAreaView style={styles.safe}>
-        <KeyboardAvoidingView
-          behavior={Platform.OS === "ios" ? "padding" : undefined}
-          style={styles.flex}
+        <KeyboardFormScroll
+          contentContainerStyle={styles.content}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+          }
         >
-          <ScrollView
-            ref={scrollRef}
-            contentContainerStyle={styles.content}
-            keyboardShouldPersistTaps="handled"
-            refreshControl={
-              <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-            }
-          >
             <ScreenHeader title="এডমিন প্যানেল" />
 
-            <View
-              style={styles.section}
+            <ScrollView
+              ref={tabBarRef}
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.tabBarContent}
+              style={styles.tabBarScroll}
               onLayout={(e) => {
-                grantSectionY.current = e.nativeEvent.layout.y;
-                markSection("grant", e.nativeEvent.layout.y);
+                tabBarWidth.current = e.nativeEvent.layout.width;
+                scrollTabToCenter(activeTab);
               }}
             >
-              <AppText style={styles.sectionTitle}>এডমিন অ্যাক্সেস</AppText>
+              {ADMIN_TABS.map((tab) => {
+                const isActive = activeTab === tab.id;
+                return (
+                  <TouchableOpacity
+                    key={tab.id}
+                    activeOpacity={0.88}
+                    onPress={() => switchTab(tab.id)}
+                    onLayout={(e) => {
+                      const { x, width } = e.nativeEvent.layout;
+                      handleTabLayout(tab.id, x, width);
+                    }}
+                    style={[
+                      styles.tabPillOuter,
+                      isActive && { borderColor: tab.activeBorder },
+                    ]}
+                  >
+                    {isActive ? (
+                      <LinearGradient
+                        colors={tab.activeGradient}
+                        start={{ x: 0, y: 0 }}
+                        end={{ x: 1, y: 1 }}
+                        style={[
+                          styles.tabPill,
+                          styles.tabPillActive,
+                          { borderColor: tab.activeBorder },
+                        ]}
+                      >
+                        <View
+                          style={[
+                            styles.tabIconWrap,
+                            { backgroundColor: "rgba(255,255,255,0.72)" },
+                          ]}
+                        >
+                          <Ionicons
+                            name={tab.icon}
+                            size={16}
+                            color={tab.activeIcon}
+                          />
+                        </View>
+                        <AppText
+                          style={[styles.tabLabel, { color: tab.activeText }]}
+                        >
+                          {tab.label}
+                        </AppText>
+                      </LinearGradient>
+                    ) : (
+                      <View
+                        style={[
+                          styles.tabPill,
+                          { backgroundColor: tab.inactiveBg },
+                        ]}
+                      >
+                        <View style={styles.tabIconWrap}>
+                          <Ionicons
+                            name={tab.icon}
+                            size={16}
+                            color={colors.textLight}
+                          />
+                        </View>
+                        <AppText style={styles.tabLabel}>{tab.label}</AppText>
+                      </View>
+                    )}
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+
+            {activeTab === "access" ? (
+            <View style={styles.section}>
               <AppText style={styles.sectionHint}>
                 সাথী/ছাত্র খুঁজে বা সরাসরি মোবাইল নম্বর দিয়ে এডমিন করুন। নতুন
                 এডমিনকে SMS-এ পিন পাঠানো হবে।
@@ -292,11 +531,6 @@ export default function AdminScreen() {
                 loading={loadingAdmins}
               />
 
-              <View
-                onLayout={(e) =>
-                  markSection("admins", grantSectionY.current + e.nativeEvent.layout.y)
-                }
-              >
               <AppText style={styles.listTitle}>বর্তমান এডমিনগণ</AppText>
               {admins.length === 0 ? (
                 <AppText style={styles.empty}>কোনো এডমিন নেই</AppText>
@@ -325,16 +559,14 @@ export default function AdminScreen() {
                   </View>
                 ))
               )}
-              </View>
             </View>
+            ) : null}
 
-            <View
-              style={styles.section}
-              onLayout={(e) => markSection("masjid", e.nativeEvent.layout.y)}
-            >
-              <AppText style={styles.sectionTitle}>মসজিদ ব্যবস্থাপনা</AppText>
+            {activeTab === "masjid" ? (
+            <View style={styles.section}>
               <AppText style={styles.sectionHint}>
-                নতুন মসজিদ যোগ করুন বা অপ্রয়োজনীয় মসজিদ মুছুন
+                নতুন মসজিদ যোগ করুন, নাম সম্পাদনা করুন বা অপ্রয়োজনীয় মসজিদ
+                মুছুন
               </AppText>
               <InputField
                 label="নতুন মসজিদের নাম"
@@ -353,28 +585,78 @@ export default function AdminScreen() {
                 <AppText style={styles.empty}>কোনো মসজিদ নেই</AppText>
               ) : (
                 masjids.map((item) => (
-                  <View key={item.id} style={styles.listCard}>
-                    <View style={styles.listInfo}>
-                      <AppText style={styles.listName}>{item.name}</AppText>
-                    </View>
-                    <TouchableOpacity
-                      style={styles.removeBtn}
-                      onPress={() => confirmDeleteMasjid(item)}
-                    >
-                      <AppText style={styles.removeText}>মুছুন</AppText>
-                    </TouchableOpacity>
+                  <View
+                    key={item.id}
+                    style={[
+                      styles.listCard,
+                      editingMasjidId === item.id && styles.listCardEditing,
+                    ]}
+                  >
+                    {editingMasjidId === item.id ? (
+                      <>
+                        <InlineEditInput
+                          value={editMasjidName}
+                          onChangeText={setEditMasjidName}
+                          placeholder="মসজিদের নাম"
+                        />
+                        <View style={styles.editActions}>
+                          <TouchableOpacity
+                            style={styles.saveBtn}
+                            onPress={() => saveEditMasjid(item)}
+                            disabled={loadingMasjids}
+                          >
+                            <AppText style={styles.saveText}>সংরক্ষণ করুন</AppText>
+                          </TouchableOpacity>
+                          <TouchableOpacity
+                            style={styles.cancelBtn}
+                            onPress={cancelEditMasjid}
+                            disabled={loadingMasjids}
+                          >
+                            <AppText style={styles.cancelText}>বাতিল করুন</AppText>
+                          </TouchableOpacity>
+                        </View>
+                      </>
+                    ) : (
+                      <>
+                        <View style={styles.listInfo}>
+                          <AppText style={styles.listName}>{item.name}</AppText>
+                        </View>
+                        <View style={styles.listActions}>
+                          <TouchableOpacity
+                            style={styles.editBtn}
+                            onPress={() => startEditMasjid(item)}
+                            accessibilityLabel="সম্পাদনা"
+                          >
+                            <Ionicons
+                              name="create-outline"
+                              size={18}
+                              color={colors.primary}
+                            />
+                          </TouchableOpacity>
+                          <TouchableOpacity
+                            style={styles.removeBtn}
+                            onPress={() => confirmDeleteMasjid(item)}
+                            accessibilityLabel="মুছুন"
+                          >
+                            <Ionicons
+                              name="trash-outline"
+                              size={17}
+                              color="#E74C3C"
+                            />
+                          </TouchableOpacity>
+                        </View>
+                      </>
+                    )}
                   </View>
                 ))
               )}
             </View>
+            ) : null}
 
-            <View
-              style={styles.section}
-              onLayout={(e) => markSection("school", e.nativeEvent.layout.y)}
-            >
-              <AppText style={styles.sectionTitle}>স্কুল ব্যবস্থাপনা</AppText>
+            {activeTab === "school" ? (
+            <View style={styles.section}>
               <AppText style={styles.sectionHint}>
-                নতুন স্কুল যোগ করুন বা অপ্রয়োজনীয় স্কুল মুছুন
+                নতুন স্কুল যোগ করুন, নাম সম্পাদনা করুন বা অপ্রয়োজনীয় স্কুল মুছুন
               </AppText>
               <InputField
                 label="নতুন স্কুলের নাম"
@@ -393,22 +675,74 @@ export default function AdminScreen() {
                 <AppText style={styles.empty}>কোনো স্কুল নেই</AppText>
               ) : (
                 schools.map((item) => (
-                  <View key={item.id} style={styles.listCard}>
-                    <View style={styles.listInfo}>
-                      <AppText style={styles.listName}>{item.name}</AppText>
-                    </View>
-                    <TouchableOpacity
-                      style={styles.removeBtn}
-                      onPress={() => confirmDeleteSchool(item)}
-                    >
-                      <AppText style={styles.removeText}>মুছুন</AppText>
-                    </TouchableOpacity>
+                  <View
+                    key={item.id}
+                    style={[
+                      styles.listCard,
+                      editingSchoolId === item.id && styles.listCardEditing,
+                    ]}
+                  >
+                    {editingSchoolId === item.id ? (
+                      <>
+                        <InlineEditInput
+                          value={editSchoolName}
+                          onChangeText={setEditSchoolName}
+                          placeholder="স্কুলের নাম"
+                        />
+                        <View style={styles.editActions}>
+                          <TouchableOpacity
+                            style={styles.saveBtn}
+                            onPress={() => saveEditSchool(item)}
+                            disabled={loadingSchools}
+                          >
+                            <AppText style={styles.saveText}>সংরক্ষণ করুন</AppText>
+                          </TouchableOpacity>
+                          <TouchableOpacity
+                            style={styles.cancelBtn}
+                            onPress={cancelEditSchool}
+                            disabled={loadingSchools}
+                          >
+                            <AppText style={styles.cancelText}>বাতিল করুন</AppText>
+                          </TouchableOpacity>
+                        </View>
+                      </>
+                    ) : (
+                      <>
+                        <View style={styles.listInfo}>
+                          <AppText style={styles.listName}>{item.name}</AppText>
+                        </View>
+                        <View style={styles.listActions}>
+                          <TouchableOpacity
+                            style={styles.editBtn}
+                            onPress={() => startEditSchool(item)}
+                            accessibilityLabel="সম্পাদনা"
+                          >
+                            <Ionicons
+                              name="create-outline"
+                              size={18}
+                              color={colors.primary}
+                            />
+                          </TouchableOpacity>
+                          <TouchableOpacity
+                            style={styles.removeBtn}
+                            onPress={() => confirmDeleteSchool(item)}
+                            accessibilityLabel="মুছুন"
+                          >
+                            <Ionicons
+                              name="trash-outline"
+                              size={17}
+                              color="#E74C3C"
+                            />
+                          </TouchableOpacity>
+                        </View>
+                      </>
+                    )}
                   </View>
                 ))
               )}
             </View>
-          </ScrollView>
-        </KeyboardAvoidingView>
+            ) : null}
+        </KeyboardFormScroll>
       </SafeAreaView>
     </GradientBackground>
   );
@@ -416,8 +750,53 @@ export default function AdminScreen() {
 
 const styles = StyleSheet.create({
   safe: { flex: 1 },
-  flex: { flex: 1 },
-  content: { padding: spacing.lg, paddingBottom: 40 },
+  content: { padding: spacing.lg },
+  tabBarScroll: {
+    marginBottom: spacing.md,
+    flexGrow: 0,
+  },
+  tabBarContent: {
+    gap: spacing.sm,
+    paddingBottom: 2,
+  },
+  tabPillOuter: {
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    ...shadows.card,
+    shadowOpacity: 0.08,
+    elevation: 2,
+  },
+  tabPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    borderRadius: radius.lg,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    minHeight: 46,
+  },
+  tabPillActive: {
+    borderWidth: 1,
+    ...shadows.card,
+    shadowOpacity: 0.12,
+    elevation: 3,
+  },
+  tabIconWrap: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(255,255,255,0.8)",
+    flexShrink: 0,
+  },
+  tabLabel: {
+    fontFamily: "HindSiliguri_700Bold",
+    fontSize: 13,
+    color: colors.textLight,
+    lineHeight: 18,
+  },
   section: {
     backgroundColor: colors.card,
     borderRadius: radius.lg,
@@ -472,6 +851,10 @@ const styles = StyleSheet.create({
     marginBottom: spacing.sm,
     gap: spacing.sm,
   },
+  listCardEditing: {
+    flexDirection: "column",
+    alignItems: "stretch",
+  },
   listInfo: { flex: 1 },
   listName: {
     fontFamily: "HindSiliguri_600SemiBold",
@@ -490,12 +873,73 @@ const styles = StyleSheet.create({
     color: colors.primary,
     marginTop: 4,
   },
+  listActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.xs,
+    flexShrink: 0,
+  },
+  editInput: {
+    width: "100%",
+    fontFamily: "HindSiliguri_400Regular",
+    fontSize: 15,
+    color: colors.text,
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.sm,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 8,
+  },
+  editActions: {
+    flexDirection: "row",
+    alignItems: "stretch",
+    gap: spacing.sm,
+    marginTop: spacing.sm,
+    width: "100%",
+  },
+  editBtn: {
+    backgroundColor: "#E8F4FA",
+    borderWidth: 1,
+    borderColor: colors.primary,
+    borderRadius: radius.sm,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+  },
+  saveBtn: {
+    flex: 1,
+    backgroundColor: colors.primary,
+    borderRadius: radius.sm,
+    paddingVertical: 10,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  saveText: {
+    fontFamily: "HindSiliguri_600SemiBold",
+    color: "#FFFFFF",
+    fontSize: 13,
+  },
+  cancelBtn: {
+    flex: 1,
+    backgroundColor: colors.background,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.sm,
+    paddingVertical: 10,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  cancelText: {
+    fontFamily: "HindSiliguri_600SemiBold",
+    color: colors.textLight,
+    fontSize: 13,
+  },
   removeBtn: {
     backgroundColor: "#FFF0F0",
     borderWidth: 1,
     borderColor: "#E74C3C",
     borderRadius: radius.sm,
-    paddingHorizontal: spacing.sm,
+    paddingHorizontal: 8,
     paddingVertical: 6,
   },
   removeText: {

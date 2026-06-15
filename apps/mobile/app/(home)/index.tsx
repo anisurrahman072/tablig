@@ -76,8 +76,8 @@ export default function HomeScreen() {
           {account?.isAdmin ? (
             <>
               <BigCard
-                title="ব্যাচ এসএমএস ইতিহাস"
-                subtitle="একসাথে পাঠানো এসএমএস দেখুন ও পুনরায় পাঠান"
+                title="এসএমএস ইতিহাস"
+                subtitle="একক ও ব্যাচ এসএমএস দেখুন, পুনরায় পাঠান"
                 colors={["#0B5345", "#1ABC9C"]}
                 onPress={() => router.push("/batch-sms-history")}
               />

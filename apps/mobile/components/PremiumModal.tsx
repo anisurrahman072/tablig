@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState } from "react";
 import {
   Keyboard,
   Modal,
@@ -10,12 +10,12 @@ import {
   useWindowDimensions,
   View,
   ViewStyle,
-} from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { AppText } from './AppText';
-import { colors, radius, shadows, spacing } from '../theme';
+} from "react-native";
+import { Ionicons } from "@expo/vector-icons";
+import { LinearGradient } from "expo-linear-gradient";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { AppText } from "./AppText";
+import { colors, radius, shadows, spacing } from "../theme";
 
 type Props = {
   visible: boolean;
@@ -27,7 +27,7 @@ type Props = {
   contentStyle?: ViewStyle;
   /** Lifts sheet above keyboard when typing (iOS + Android Modal). */
   keyboardAware?: boolean;
-  /** When false, children manage their own scroll areas (avoids nested scroll issues). */
+  /** When true, wraps children in a scroll view. When false, children manage their own scroll areas. */
   scrollable?: boolean;
 };
 
@@ -38,13 +38,14 @@ export function PremiumModal({
   title,
   onClose,
   onConfirm,
-  confirmLabel = 'ঠিক আছে',
+  confirmLabel = "ঠিক আছে",
   children,
   contentStyle,
   keyboardAware = false,
   scrollable,
 }: Props) {
-  const useOuterScroll = keyboardAware && scrollable !== false;
+  const useOuterScroll =
+    scrollable === true || (keyboardAware && scrollable !== false);
   const insets = useSafeAreaInsets();
   const { height: windowHeight } = useWindowDimensions();
   const [keyboardHeight, setKeyboardHeight] = useState(0);
@@ -59,8 +60,10 @@ export function PremiumModal({
       setKeyboardHeight(metrics.height);
     }
     // Android Modal ignores adjustResize — must lift the sheet manually on both platforms.
-    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
-    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+    const showEvent =
+      Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow";
+    const hideEvent =
+      Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide";
     const showSub = Keyboard.addListener(showEvent, (e) => {
       setKeyboardHeight(e.endCoordinates.height);
     });
@@ -81,14 +84,22 @@ export function PremiumModal({
     if (useOuterScroll) {
       return keyboardOpen
         ? {
+            height: windowHeight - keyboardHeight - TOP_GAP,
             maxHeight: windowHeight - keyboardHeight - TOP_GAP,
             marginBottom: keyboardHeight,
             paddingBottom: spacing.md,
           }
-        : { maxHeight: '78%' as const, paddingBottom: bottomPad };
+        : {
+            height: sheetHeight,
+            maxHeight: sheetHeight,
+            paddingBottom: bottomPad,
+          };
     }
     if (keyboardOpen) {
-      const availH = Math.min(sheetHeight, windowHeight - keyboardHeight - TOP_GAP);
+      const availH = Math.min(
+        sheetHeight,
+        windowHeight - keyboardHeight - TOP_GAP,
+      );
       return {
         height: availH,
         maxHeight: availH,
@@ -96,24 +107,42 @@ export function PremiumModal({
         paddingBottom: bottomPad,
       };
     }
-    return { height: sheetHeight, maxHeight: sheetHeight, paddingBottom: bottomPad };
+    return {
+      height: sheetHeight,
+      maxHeight: sheetHeight,
+      paddingBottom: bottomPad,
+    };
   })();
 
   return (
-    <Modal transparent animationType="slide" visible={visible} onRequestClose={onClose}>
-      <Pressable style={styles.overlay} onPress={onClose}>
-        <Pressable
-          style={[styles.sheet, sheetStyle]}
-          onPress={(e) => e.stopPropagation()}
+    <Modal
+      transparent
+      animationType="slide"
+      visible={visible}
+      onRequestClose={onClose}
+    >
+      <View style={styles.overlay}>
+        {/* Backdrop — tapping outside the sheet closes the modal */}
+        <Pressable style={StyleSheet.absoluteFillObject} onPress={onClose} />
+        <View
+          style={[
+            styles.sheet,
+            useOuterScroll && styles.sheetScrollable,
+            sheetStyle,
+          ]}
         >
           <LinearGradient
-            colors={[colors.primary, '#48C9B0', colors.secondary]}
+            colors={[colors.primary, "#48C9B0", colors.secondary]}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
             style={styles.header}
           >
             {onConfirm ? (
-              <TouchableOpacity onPress={onConfirm} hitSlop={12} style={styles.headerSide}>
+              <TouchableOpacity
+                onPress={onConfirm}
+                hitSlop={12}
+                style={styles.headerSide}
+              >
                 <AppText style={styles.confirm}>{confirmLabel}</AppText>
               </TouchableOpacity>
             ) : (
@@ -133,9 +162,10 @@ export function PremiumModal({
 
           {useOuterScroll ? (
             <ScrollView
+              style={styles.scrollView}
               keyboardShouldPersistTaps="handled"
-              showsVerticalScrollIndicator={false}
-              automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'}
+              showsVerticalScrollIndicator
+              automaticallyAdjustKeyboardInsets={Platform.OS === "ios"}
               nestedScrollEnabled
               contentContainerStyle={[
                 styles.scrollContent,
@@ -147,13 +177,17 @@ export function PremiumModal({
             </ScrollView>
           ) : (
             <View
-              style={[styles.content, keyboardAware && styles.contentFlex, contentStyle]}
+              style={[
+                styles.content,
+                !useOuterScroll && styles.contentFill,
+                contentStyle,
+              ]}
             >
               {children}
             </View>
           )}
-        </Pressable>
-      </Pressable>
+        </View>
+      </View>
     </Modal>
   );
 }
@@ -161,21 +195,28 @@ export function PremiumModal({
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    justifyContent: 'flex-end',
-    backgroundColor: 'rgba(26, 43, 60, 0.55)',
+    justifyContent: "flex-end",
+    backgroundColor: "rgba(26, 43, 60, 0.55)",
   },
   sheet: {
     backgroundColor: colors.card,
     borderTopLeftRadius: radius.xl,
     borderTopRightRadius: radius.xl,
-    overflow: 'hidden',
-    maxHeight: '78%',
+    overflow: "hidden",
+    maxHeight: "78%",
     ...shadows.card,
   },
+  sheetScrollable: {
+    flexDirection: "column",
+  },
+  scrollView: {
+    flex: 1,
+    minHeight: 0,
+  },
   header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.md,
   },
@@ -183,25 +224,26 @@ const styles = StyleSheet.create({
     minWidth: 64,
   },
   closeSide: {
-    alignItems: 'flex-end',
+    alignItems: "flex-end",
   },
   title: {
     flex: 1,
-    fontFamily: 'HindSiliguri_700Bold',
+    fontFamily: "HindSiliguri_700Bold",
     fontSize: 17,
-    color: '#FFFFFF',
-    textAlign: 'center',
+    color: "#FFFFFF",
+    textAlign: "center",
   },
   confirm: {
-    fontFamily: 'HindSiliguri_700Bold',
+    fontFamily: "HindSiliguri_700Bold",
     fontSize: 15,
-    color: '#FFFFFF',
+    color: "#FFFFFF",
   },
   content: {
     backgroundColor: colors.background,
   },
-  contentFlex: {
+  contentFill: {
     flex: 1,
+    minHeight: 0,
   },
   scrollContent: {
     backgroundColor: colors.background,

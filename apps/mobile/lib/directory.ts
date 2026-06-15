@@ -3,6 +3,7 @@ export type RecentKarguzari = {
   meetingDate: string;
   timeSlot: string;
   text: string;
+  author?: { name?: string };
   attendeeNames: string[];
 };
 
@@ -13,6 +14,7 @@ export type DirectoryEntry = {
   name: string;
   masjid: string;
   schoolName?: string;
+  classValue?: number | null;
   mobile?: string;
   canDelete?: boolean;
   recentKarguzari?: RecentKarguzari[];
@@ -45,3 +47,35 @@ export type BatchSmsLog = {
   encoding: 'gsm' | 'unicode';
   charCount: number;
 };
+
+export type SingleSmsLog = {
+  kind: 'single';
+  _id: string;
+  targetId: string;
+  recipientName: string;
+  recipientMobile: string;
+  message: string;
+  status: 'sent' | 'failed';
+  errorMessage?: string;
+  sender?: { name: string };
+  createdAt: string;
+  encoding: 'gsm' | 'unicode';
+  charCount: number;
+};
+
+export type BatchSmsHistoryItem = {
+  kind: 'batch';
+  _id: string;
+  message: string;
+  status: BatchSmsLog['status'];
+  totalRecipients: number;
+  sentCount: number;
+  failedCount: number;
+  skippedCount: number;
+  sender?: { name: string };
+  createdAt: string;
+  encoding: 'gsm' | 'unicode';
+  charCount: number;
+};
+
+export type SmsHistoryItem = SingleSmsLog | BatchSmsHistoryItem;

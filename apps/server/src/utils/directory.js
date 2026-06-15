@@ -2,6 +2,10 @@ const Account = require('../models/Account');
 const Person = require('../models/Person');
 const Karguzari = require('../models/Karguzari');
 const {
+  UNIVERSITY_CLASS_FILTER_VALUE,
+  UNIVERSITY_CLASS_YEAR_VALUES,
+} = require('../constants');
+const {
   ACCOUNT_TEXT_FIELDS,
   PERSON_TEXT_FIELDS,
   buildRegexOrConditions,
@@ -207,19 +211,84 @@ function formatPersonEntry(person, viewer) {
   };
 }
 
-function buildExactPersonFilter({ type, masjid, classValue, schoolName }) {
+function hasStudentOnlyFilters({ classValue, schoolName }) {
+  return (classValue != null && classValue !== '') || !!schoolName;
+}
+
+function shouldIncludeAccounts({ type, classValue, schoolName, claimedStatus }) {
+  if (hasStudentOnlyFilters({ classValue, schoolName })) return false;
+  if (claimedStatus === 'unclaimed') return false;
+  if (type === 'student') return false;
+  return true;
+}
+
+function needsRestrictedAccountLookup({ timeGivenValue, masturatDaysValue, claimedStatus }) {
+  return (
+    claimedStatus === 'claimed' ||
+    (timeGivenValue != null && timeGivenValue !== '') ||
+    (masturatDaysValue != null && masturatDaysValue !== '')
+  );
+}
+
+function buildExactPersonFilter({
+  type,
+  masjid,
+  classValue,
+  schoolName,
+  timeGivenValue,
+  masturatDaysValue,
+  claimedStatus,
+}) {
   const filter = { isDeleted: ACTIVE };
 
-  if (type && ['sathi', 'student'].includes(type)) {
-    filter.type = type;
+  const effectiveType =
+    hasStudentOnlyFilters({ classValue, schoolName }) && type !== 'sathi' ? 'student' : type;
+
+  if (effectiveType && ['sathi', 'student'].includes(effectiveType)) {
+    filter.type = effectiveType;
   }
   if (masjid) filter.masjid = masjid;
   if (classValue != null && classValue !== '') {
-    filter.classValue = Number(classValue);
+    const num = Number(classValue);
+    if (num === UNIVERSITY_CLASS_FILTER_VALUE) {
+      filter.classValue = { $in: UNIVERSITY_CLASS_YEAR_VALUES };
+    } else {
+      filter.classValue = num;
+    }
   }
   if (schoolName) filter.schoolName = schoolName;
+  if (timeGivenValue != null && timeGivenValue !== '') {
+    filter.timeGivenValue = Number(timeGivenValue);
+  }
+  if (masturatDaysValue != null && masturatDaysValue !== '') {
+    filter.masturatDaysValue = Number(masturatDaysValue);
+  }
+  if (claimedStatus === 'claimed') {
+    filter.isLocked = true;
+  } else if (claimedStatus === 'unclaimed') {
+    filter.isLocked = false;
+  }
 
   return filter;
+}
+
+async function findMatchingAccountIdsForPersonFilter(exactPersonFilter, exactAccountFilter) {
+  const persons = await Person.find(exactPersonFilter, { mobile: 1, claimedBy: 1 }).lean();
+  if (!persons.length) return [];
+
+  const claimedIds = [...new Set(persons.map((p) => p.claimedBy).filter(Boolean))];
+  const mobiles = [...new Set(persons.map((p) => p.mobile).filter(Boolean))];
+
+  const orConditions = [];
+  if (claimedIds.length) orConditions.push({ _id: { $in: claimedIds } });
+  if (mobiles.length) orConditions.push({ mobile: { $in: mobiles } });
+  if (!orConditions.length) return [];
+
+  const accounts = await Account.find(
+    { ...exactAccountFilter, $or: orConditions },
+    { _id: 1 },
+  ).lean();
+  return accounts.map((a) => a._id);
 }
 
 function buildExactAccountFilter({ masjid }) {
@@ -235,8 +304,7 @@ function buildExactAccountFilter({ masjid }) {
 const MAX_SEARCH_CANDIDATES = 300;
 
 /**
- * Fetches the last 2 karguzari for each entry's linked person using a single
- * aggregation pipeline ($in on all page person IDs → group → slice).
+ * Fetches the last 2 karguzari for each entry's linked person.
  * Only called when the caller opts in via withKarguzari=true.
  * Never runs on more than ~10-20 entries (one page), so it is cheap.
  */
@@ -252,28 +320,33 @@ async function attachRecentKarguzari(entries) {
 
   if (personIds.length === 0) return entries;
 
-  // One aggregation query for all page persons → last 2 per person
-  const groups = await Karguzari.aggregate([
-    { $match: { person: { $in: personIds } } },
-    { $sort: { meetingDate: -1, createdAt: -1 } },
-    {
-      $group: {
-        _id: '$person',
-        items: {
-          $push: {
-            _id: '$_id',
-            meetingDate: '$meetingDate',
-            timeSlot: '$timeSlot',
-            text: '$text',
-            attendeeNames: '$attendeeNames',
-          },
-        },
-      },
-    },
-    { $project: { _id: 1, items: { $slice: ['$items', 2] } } },
-  ]);
+  const all = await Karguzari.find({ person: { $in: personIds } })
+    .sort({ meetingDate: -1, createdAt: -1 })
+    .populate('author', 'name')
+    .populate('attendees', 'name')
+    .lean();
 
-  const karguzariMap = new Map(groups.map((g) => [String(g._id), g.items]));
+  const karguzariMap = new Map();
+  for (const k of all) {
+    const pid = String(k.person);
+    if (!karguzariMap.has(pid)) karguzariMap.set(pid, []);
+    const list = karguzariMap.get(pid);
+    if (list.length >= 2) continue;
+
+    const attendeeNames = [
+      ...(k.attendees?.map((a) => a.name).filter(Boolean) || []),
+      ...(k.attendeeNames || []),
+    ];
+
+    list.push({
+      _id: k._id,
+      meetingDate: k.meetingDate,
+      timeSlot: k.timeSlot,
+      text: k.text,
+      author: k.author ? { name: k.author.name } : undefined,
+      attendeeNames: [...new Set(attendeeNames)],
+    });
+  }
 
   return entries.map((entry) => {
     const pid = entry.source === 'account' ? entry.personId : entry._id;
@@ -289,6 +362,9 @@ async function listDirectoryEntries(query, viewer) {
     classValue,
     schoolName,
     masjid,
+    timeGivenValue,
+    masturatDaysValue,
+    claimedStatus,
     withKarguzari,
     page = 1,
     limit = 10,
@@ -297,9 +373,20 @@ async function listDirectoryEntries(query, viewer) {
   const pageNum = Math.max(1, Number(page) || 1);
   const limitNum = Math.max(1, Math.min(50, Number(limit) || 10));
   const searchQ = String(q || '').trim();
-  const includeAccounts = !type || type === 'sathi';
 
-  const exactPersonFilter = buildExactPersonFilter({ type, masjid, classValue, schoolName });
+  const filterParams = {
+    type,
+    masjid,
+    classValue,
+    schoolName,
+    timeGivenValue,
+    masturatDaysValue,
+    claimedStatus,
+  };
+  const includeAccounts = shouldIncludeAccounts(filterParams);
+  const restrictAccounts = needsRestrictedAccountLookup(filterParams);
+
+  const exactPersonFilter = buildExactPersonFilter(filterParams);
   const exactAccountFilter = buildExactAccountFilter({ masjid });
 
   const wantsKarguzari = withKarguzari === 'true' || withKarguzari === true;
@@ -310,6 +397,7 @@ async function listDirectoryEntries(query, viewer) {
         exactAccountFilter,
         searchQ,
         includeAccounts,
+        restrictAccounts,
         pageNum,
         limitNum,
         viewer,
@@ -318,6 +406,7 @@ async function listDirectoryEntries(query, viewer) {
         exactPersonFilter,
         exactAccountFilter,
         includeAccounts,
+        restrictAccounts,
         pageNum,
         limitNum,
         viewer,
@@ -346,13 +435,14 @@ async function _listPaginated({
   exactPersonFilter,
   exactAccountFilter,
   includeAccounts,
+  restrictAccounts,
   pageNum,
   limitNum,
   viewer,
 }) {
   const skip = (pageNum - 1) * limitNum;
 
-  // Student-only: simple single-collection aggregation (no cross-collection dedup needed)
+  // Person-only: simple single-collection aggregation (no cross-collection dedup needed)
   if (!includeAccounts) {
     const [result] = await Person.aggregate([
       { $match: exactPersonFilter },
@@ -374,8 +464,17 @@ async function _listPaginated({
 
   // ── Phase 1: minimal fields only, both collections in parallel ───────────────
 
+  let resolvedAccountFilter = exactAccountFilter;
+  if (restrictAccounts) {
+    const matchingIds = await findMatchingAccountIdsForPersonFilter(
+      exactPersonFilter,
+      exactAccountFilter,
+    );
+    resolvedAccountFilter = { ...exactAccountFilter, _id: { $in: matchingIds } };
+  }
+
   const [accountsMinimal, personsMinimal] = await Promise.all([
-    Account.find(exactAccountFilter, { _id: 1, mobile: 1, updatedAt: 1 }).lean(),
+    Account.find(resolvedAccountFilter, { _id: 1, mobile: 1, updatedAt: 1 }).lean(),
     Person.find(exactPersonFilter, { _id: 1, mobile: 1, type: 1, updatedAt: 1, claimedBy: 1 }).lean(),
   ]);
 
@@ -491,6 +590,7 @@ async function _listWithSearch({
   exactAccountFilter,
   searchQ,
   includeAccounts,
+  restrictAccounts,
   pageNum,
   limitNum,
   viewer,
@@ -508,13 +608,22 @@ async function _listWithSearch({
 
   let accountQuery = null;
   if (includeAccounts) {
+    let baseAccountFilter = { ...exactAccountFilter };
+    if (restrictAccounts) {
+      const matchingIds = await findMatchingAccountIdsForPersonFilter(
+        exactPersonFilter,
+        exactAccountFilter,
+      );
+      baseAccountFilter = { ...exactAccountFilter, _id: { $in: matchingIds } };
+    }
+
     if (queryMatchesSathiKeyword(searchQ)) {
-      accountQuery = { ...exactAccountFilter };
+      accountQuery = baseAccountFilter;
     } else {
       const accountSearchOr = buildRegexOrConditions(ACCOUNT_TEXT_FIELDS, searchQ);
       accountQuery = accountSearchOr.length
-        ? { ...exactAccountFilter, $or: accountSearchOr }
-        : { ...exactAccountFilter };
+        ? { ...baseAccountFilter, $or: accountSearchOr }
+        : baseAccountFilter;
     }
   }
 

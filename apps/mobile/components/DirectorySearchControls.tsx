@@ -5,13 +5,20 @@ import {
   TextInput,
   TouchableOpacity,
   View,
+  ScrollView,
+  Dimensions,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { AppText } from "./AppText";
 import { SelectField } from "./SelectField";
 import api from "../lib/api";
-import { STUDENT_CLASS_OPTIONS } from "../constants/options";
+import {
+  MASTURAT_DAYS_OPTIONS,
+  STUDENT_CLASS_FILTER_OPTIONS,
+  TIME_GIVEN_OPTIONS,
+} from "../constants/options";
 import type { DirectorySearchFilters } from "../hooks/useDirectorySearch";
+import { buildMasjidSelectOptions } from "../lib/masjid";
 import { colors, radius, shadows, spacing } from "../theme";
 
 type Props = {
@@ -104,8 +111,15 @@ export function DirectorySearchControls({
               </TouchableOpacity>
             ) : null}
           </View>
-          <SelectField
-            label="ধরন"
+          <ScrollView
+            style={styles.filterScroll}
+            contentContainerStyle={styles.filterScrollContent}
+            nestedScrollEnabled
+            showsVerticalScrollIndicator
+            keyboardShouldPersistTaps="handled"
+          >
+            <SelectField
+              label="ধরন"
             value={filters.type || null}
             onValueChange={(value) =>
               onFilterChange("type", (value || "") as "" | "sathi" | "student")
@@ -115,12 +129,13 @@ export function DirectorySearchControls({
               { label: "ছাত্র", value: "student" },
             ]}
             placeholder="সব"
+            placeholderSelectable
           />
           <SelectField
             label="ক্লাস"
             value={filters.classValue}
             onValueChange={(value) => onFilterChange("classValue", value)}
-            options={STUDENT_CLASS_OPTIONS}
+            options={STUDENT_CLASS_FILTER_OPTIONS}
           />
           <SelectField
             label="স্কুলের নাম"
@@ -132,8 +147,34 @@ export function DirectorySearchControls({
             label="মসজিদ"
             value={filters.masjid}
             onValueChange={(value) => onFilterChange("masjid", value)}
-            options={masjids.map((masjid) => ({ label: masjid, value: masjid }))}
+            options={buildMasjidSelectOptions(masjids)}
           />
+          <SelectField
+            label="অ্যাকাউন্ট দাবি"
+            value={filters.claimedStatus || null}
+            onValueChange={(value) =>
+              onFilterChange("claimedStatus", (value || "") as "" | "claimed" | "unclaimed")
+            }
+            options={[
+              { label: "দাবিকৃত", value: "claimed" },
+              { label: "অদাবিকৃত", value: "unclaimed" },
+            ]}
+            placeholder="সব"
+            placeholderSelectable
+          />
+          <SelectField
+            label="এর আগে সময় দিয়েছেন"
+            value={filters.timeGivenValue}
+            onValueChange={(value) => onFilterChange("timeGivenValue", value)}
+            options={TIME_GIVEN_OPTIONS}
+          />
+          <SelectField
+            label="মাস্তুরাতে সময় দিয়েছেন"
+            value={filters.masturatDaysValue}
+            onValueChange={(value) => onFilterChange("masturatDaysValue", value)}
+            options={MASTURAT_DAYS_OPTIONS}
+          />
+          </ScrollView>
         </View>
       ) : null}
     </View>
@@ -213,6 +254,13 @@ const styles = StyleSheet.create({
     marginTop: spacing.sm,
     borderWidth: 1,
     borderColor: "rgba(46, 134, 171, 0.12)",
+    overflow: "hidden",
+  },
+  filterScroll: {
+    maxHeight: Math.min(340, Dimensions.get("window").height * 0.38),
+  },
+  filterScrollContent: {
+    paddingBottom: spacing.xs,
   },
   filterPanelHeader: {
     flexDirection: "row",

@@ -61,7 +61,7 @@ const ACTIONS: QuickAction[] = [
   },
   {
     id: "sms-history",
-    title: "ব্যাচ SMS ইতিহাস",
+    title: "এসএমএস ইতিহাস",
     icon: "mail-open-outline",
     iconBg: "rgba(255, 255, 255, 0.22)",
     iconColor: "#148F77",

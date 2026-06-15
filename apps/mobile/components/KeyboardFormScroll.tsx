@@ -22,6 +22,7 @@ import { spacing } from '../theme';
 type Props = {
   children: React.ReactNode;
   contentContainerStyle?: ViewStyle;
+  refreshControl?: React.ReactElement;
 };
 
 type ScrollIntoViewFn = (fieldRef: React.RefObject<View | null>) => void;
@@ -34,7 +35,7 @@ export function useScrollOnInputFocus(): ScrollIntoViewFn | null {
 }
 
 export const KeyboardFormScroll = forwardRef<ScrollView, Props>(function KeyboardFormScroll(
-  { children, contentContainerStyle },
+  { children, contentContainerStyle, refreshControl },
   ref,
 ) {
   const scrollRef = useRef<ScrollView>(null);
@@ -96,6 +97,7 @@ export const KeyboardFormScroll = forwardRef<ScrollView, Props>(function Keyboar
             contentContainerStyle,
             { paddingBottom: spacing.lg + androidKeyboardPadding },
           ]}
+          refreshControl={refreshControl}
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="none"
           automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'}

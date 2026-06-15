@@ -14,14 +14,15 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { GradientBackground } from '../components/GradientBackground';
 import { ScreenHeader } from '../components/ScreenHeader';
 import { InputField } from '../components/InputField';
+import { DuplicatePersonSuggestions } from '../components/NameDuplicateSuggestions';
 import { SelectField } from '../components/SelectField';
 import { KeyboardFormScroll } from '../components/KeyboardFormScroll';
 import { AppText } from '../components/AppText';
 import api from '../lib/api';
 import { appAlert } from '../lib/appAlert';
 import { TIME_GIVEN_OPTIONS, MASTURAT_DAYS_OPTIONS, STUDENT_CLASS_OPTIONS } from '../constants/options';
+import { buildMasjidSelectOptions } from '../lib/masjid';
 import { colors, radius, shadows, spacing } from '../theme';
-
 export default function AddPersonScreen() {
   const router = useRouter();
   const scrollRef = useRef<ScrollView>(null);
@@ -87,9 +88,13 @@ export default function AddPersonScreen() {
             masturatDaysValue: form.masturatDaysValue,
             profession: form.profession,
           };
-      await api.post('/persons', payload);
+      const res = await api.post('/persons', payload);
+      const personId = res.data.data._id;
       appAlert('সফল', isStudent ? 'ছাত্র যোগ হয়েছে' : 'সাথী যোগ হয়েছে', [
-        { text: 'ঠিক আছে', onPress: () => router.back() },
+        {
+          text: 'ঠিক আছে',
+          onPress: () => router.replace(`/person/${personId}`),
+        },
       ]);
     } catch (err: any) {
       appAlert('ত্রুটি', err.message);
@@ -136,11 +141,12 @@ export default function AddPersonScreen() {
 
           {/* ── Common fields ── */}
           <InputField label="নাম *" value={form.name} onChangeText={(v) => update('name', v)} />
+          <DuplicatePersonSuggestions query={form.name} field="name" />
           <SelectField
             label="কাছের মসজিদ *"
             value={form.masjid}
             onValueChange={(v) => update('masjid', v)}
-            options={masjids.map((m) => ({ label: m, value: m }))}
+            options={buildMasjidSelectOptions(masjids)}
           />
           <InputField
             label="বাসার লোকেশন"
@@ -153,6 +159,7 @@ export default function AddPersonScreen() {
             onChangeText={(v) => update('mobile', v)}
             keyboardType="phone-pad"
           />
+          <DuplicatePersonSuggestions query={form.mobile} field="mobile" />
           <SelectField
             label="এর আগে কত দিন সময় দিয়েছে?"
             value={form.timeGivenValue}

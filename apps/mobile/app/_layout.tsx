@@ -14,6 +14,8 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { AuthProvider, useAuth } from '../context/AuthContext';
 import { AlertProvider } from '../context/AlertContext';
 import { BatchSmsProvider } from '../context/BatchSmsContext';
+import { FabProvider } from '../context/FabContext';
+import { DraggableAddFab } from '../components/DraggableAddFab';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -61,8 +63,11 @@ export default function RootLayout() {
       <AuthProvider>
         <AlertProvider>
           <BatchSmsProvider>
-            <StatusBar style="dark" />
-            <RootNavigator />
+            <FabProvider>
+              <StatusBar style="dark" />
+              <RootNavigator />
+              <DraggableAddFab />
+            </FabProvider>
           </BatchSmsProvider>
         </AlertProvider>
       </AuthProvider>

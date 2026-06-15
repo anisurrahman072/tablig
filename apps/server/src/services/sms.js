@@ -78,10 +78,41 @@ async function sendAdminGrantedSms(mobile, pin) {
   return sendSMS(mobile, buildAdminGrantedMessage(pin));
 }
 
+function buildSignupApprovalMessage({ name, houseAddress, masjid, mobile, code }) {
+  const house = houseAddress?.trim() || "—";
+  return (
+    `তাবলিগ অ্যাপ — নতুন অ্যাকাউন্ট অনুরোধ:\n` +
+    `নাম: ${name}\n` +
+    `বাসা: ${house}\n` +
+    `মসজিদ: ${masjid}\n` +
+    `মোবাইল: ${mobile}\n` +
+    `নিরাপত্তা কোড: ${code}`
+  );
+}
+
+function buildSignupWelcomeMessage(pin) {
+  return (
+    `তাবলিগ অ্যাপ: আপনার অ্যাকাউন্ট তৈরি হয়েছে। স্বাগতম! ` +
+    `আপনার পিন: ${pin}। এখনই লগইন করুন।`
+  );
+}
+
+async function sendSignupApprovalSms(superAdminMobile, details) {
+  return sendSMS(superAdminMobile, buildSignupApprovalMessage(details));
+}
+
+async function sendSignupWelcomeSms(mobile, pin) {
+  return sendSMS(mobile, buildSignupWelcomeMessage(pin));
+}
+
 module.exports = {
   sendSMS,
   sendCustomUserSms,
   sendOtp,
   buildAdminGrantedMessage,
   sendAdminGrantedSms,
+  buildSignupApprovalMessage,
+  buildSignupWelcomeMessage,
+  sendSignupApprovalSms,
+  sendSignupWelcomeSms,
 };

@@ -1,16 +1,12 @@
 import React, { useState } from 'react';
-import {
-  ScrollView,
-  StyleSheet,
-  KeyboardAvoidingView,
-  Platform,
-} from 'react-native';
+import { StyleSheet } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { GradientBackground } from '../../components/GradientBackground';
 import { ScreenHeader } from '../../components/ScreenHeader';
 import { InputField } from '../../components/InputField';
 import { PrimaryButton } from '../../components/PrimaryButton';
+import { KeyboardFormScroll } from '../../components/KeyboardFormScroll';
 import api from '../../lib/api';
 import { appAlert } from '../../lib/appAlert';
 import { spacing } from '../../theme';
@@ -43,22 +39,17 @@ export default function ForgotPinScreen() {
   return (
     <GradientBackground>
       <SafeAreaView style={styles.safe}>
-        <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-          style={styles.flex}
-        >
-          <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-            <ScreenHeader title="পিন রিকভারি" />
-            <InputField
-              label="মোবাইল নম্বর"
-              value={mobile}
-              onChangeText={setMobile}
-              placeholder="০১XXXXXXXXX"
-              keyboardType="phone-pad"
-            />
-            <PrimaryButton title="পিন পাঠান" onPress={handleSend} loading={loading} />
-          </ScrollView>
-        </KeyboardAvoidingView>
+        <KeyboardFormScroll contentContainerStyle={styles.content}>
+          <ScreenHeader title="পিন রিকভারি" />
+          <InputField
+            label="মোবাইল নম্বর"
+            value={mobile}
+            onChangeText={setMobile}
+            placeholder="০১XXXXXXXXX"
+            keyboardType="phone-pad"
+          />
+          <PrimaryButton title="পিন পাঠান" onPress={handleSend} loading={loading} />
+        </KeyboardFormScroll>
       </SafeAreaView>
     </GradientBackground>
   );
@@ -66,6 +57,5 @@ export default function ForgotPinScreen() {
 
 const styles = StyleSheet.create({
   safe: { flex: 1 },
-  flex: { flex: 1 },
   content: { padding: spacing.lg },
 });

@@ -10,7 +10,7 @@ import { AppText } from './AppText';
 import { PremiumModal } from './PremiumModal';
 import { colors, radius, spacing } from '../theme';
 
-type Option = { label: string; value: string | number };
+type Option = { label: string; value: string | number; textColor?: string; backgroundColor?: string };
 
 type Props = {
   label: string;
@@ -18,9 +18,18 @@ type Props = {
   onValueChange: (v: string | number | null) => void;
   options: Option[];
   placeholder?: string;
+  /** When true, placeholder appears as a clear option inside the modal list. */
+  placeholderSelectable?: boolean;
 };
 
-export function SelectField({ label, value, onValueChange, options, placeholder }: Props) {
+export function SelectField({
+  label,
+  value,
+  onValueChange,
+  options,
+  placeholder,
+  placeholderSelectable = false,
+}: Props) {
   const [open, setOpen] = useState(false);
   const placeholderText = placeholder || 'নির্বাচন করুন';
   const selected = options.find((opt) => opt.value === value);
@@ -39,15 +48,28 @@ export function SelectField({ label, value, onValueChange, options, placeholder 
         onPress={() => setOpen(true)}
         activeOpacity={0.75}
       >
-        <AppText style={[styles.triggerText, !selected && styles.placeholderText]} numberOfLines={1}>
+        <AppText
+          style={[
+            styles.triggerText,
+            !selected && styles.placeholderText,
+            selected?.textColor ? { color: selected.textColor } : null,
+          ]}
+          numberOfLines={1}
+        >
           {displayText}
         </AppText>
         <Ionicons name="chevron-down" size={20} color={colors.primary} />
       </TouchableOpacity>
 
       <PremiumModal visible={open} title={label} onClose={() => setOpen(false)}>
-        <ScrollView style={styles.list} keyboardShouldPersistTaps="handled">
-          {placeholder ? (
+        <ScrollView
+          style={styles.list}
+          contentContainerStyle={styles.listContent}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator
+          nestedScrollEnabled
+        >
+          {placeholder && placeholderSelectable ? (
             <TouchableOpacity
               style={[styles.option, value === null && styles.optionSelected]}
               onPress={() => selectOption(null)}
@@ -68,13 +90,21 @@ export function SelectField({ label, value, onValueChange, options, placeholder 
                 key={String(opt.value)}
                 style={[
                   styles.option,
+                  opt.backgroundColor ? { backgroundColor: opt.backgroundColor } : null,
                   isSelected && styles.optionSelected,
                   index === options.length - 1 && styles.optionLast,
                 ]}
                 onPress={() => selectOption(opt.value)}
                 activeOpacity={0.7}
               >
-                <AppText style={[styles.optionText, isSelected && styles.optionTextSelected]}>
+                <AppText
+                  style={[
+                    styles.optionText,
+                    opt.textColor ? { color: opt.textColor } : null,
+                    isSelected && !opt.textColor && styles.optionTextSelected,
+                    isSelected && opt.textColor ? { fontFamily: 'HindSiliguri_700Bold' } : null,
+                  ]}
+                >
                   {opt.label}
                 </AppText>
                 {isSelected ? (
@@ -122,7 +152,10 @@ const styles = StyleSheet.create({
     fontFamily: 'HindSiliguri_400Regular',
   },
   list: {
-    maxHeight: 360,
+    flex: 1,
+  },
+  listContent: {
+    paddingBottom: spacing.md,
   },
   option: {
     flexDirection: 'row',

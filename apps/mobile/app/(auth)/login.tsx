@@ -1,12 +1,5 @@
 import React, { useState } from 'react';
-import {
-  ScrollView,
-  StyleSheet,
-  TouchableOpacity,
-  KeyboardAvoidingView,
-  Platform,
-  View,
-} from 'react-native';
+import { StyleSheet, TouchableOpacity, View } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { GradientBackground } from '../../components/GradientBackground';
@@ -15,6 +8,7 @@ import { ScreenHeader } from '../../components/ScreenHeader';
 import { InputField } from '../../components/InputField';
 import { PrimaryButton } from '../../components/PrimaryButton';
 import { AppText } from '../../components/AppText';
+import { KeyboardFormScroll } from '../../components/KeyboardFormScroll';
 import { useAuth } from '../../context/AuthContext';
 import { appAlert } from '../../lib/appAlert';
 import { colors, radius, spacing } from '../../theme';
@@ -64,42 +58,37 @@ export default function LoginScreen() {
             <AppText style={styles.bannerText}>✓  {successMsg}</AppText>
           </View>
         ) : null}
-        <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-          style={styles.flex}
-        >
-          <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-            <View style={styles.logoContainer}>
-              <AppLogo size={100} />
-            </View>
-            <ScreenHeader title="লগইন" />
-            <InputField
-              label="মোবাইল নম্বর"
-              value={mobile}
-              onChangeText={(v) => {
-                setMobile(v);
-                setErrorMsg(null);
-              }}
-              placeholder="০১XXXXXXXXX"
-              keyboardType="phone-pad"
-            />
-            <InputField
-              label="পিন"
-              value={pin}
-              onChangeText={(v) => {
-                setPin(v);
-                setErrorMsg(null);
-              }}
-              placeholder="••••"
-              secureTextEntry
-              keyboardType="numeric"
-            />
-            <PrimaryButton title="লগইন করুন" onPress={handleLogin} loading={loading} />
-            <TouchableOpacity onPress={() => router.push('/(auth)/forgot-pin')} style={styles.link}>
-              <AppText style={styles.linkText}>পিন ভুলে গেছেন? রিকভার করুন</AppText>
-            </TouchableOpacity>
-          </ScrollView>
-        </KeyboardAvoidingView>
+        <KeyboardFormScroll contentContainerStyle={styles.content}>
+          <View style={styles.logoContainer}>
+            <AppLogo size={100} />
+          </View>
+          <ScreenHeader title="লগইন" />
+          <InputField
+            label="মোবাইল নম্বর"
+            value={mobile}
+            onChangeText={(v) => {
+              setMobile(v);
+              setErrorMsg(null);
+            }}
+            placeholder="০১XXXXXXXXX"
+            keyboardType="phone-pad"
+          />
+          <InputField
+            label="পিন"
+            value={pin}
+            onChangeText={(v) => {
+              setPin(v);
+              setErrorMsg(null);
+            }}
+            placeholder="••••"
+            secureTextEntry
+            keyboardType="numeric"
+          />
+          <PrimaryButton title="লগইন করুন" onPress={handleLogin} loading={loading} />
+          <TouchableOpacity onPress={() => router.push('/(auth)/forgot-pin')} style={styles.link}>
+            <AppText style={styles.linkText}>পিন ভুলে গেছেন? রিকভার করুন</AppText>
+          </TouchableOpacity>
+        </KeyboardFormScroll>
       </SafeAreaView>
     </GradientBackground>
   );
@@ -107,7 +96,6 @@ export default function LoginScreen() {
 
 const styles = StyleSheet.create({
   safe: { flex: 1 },
-  flex: { flex: 1 },
   content: { padding: spacing.lg },
   logoContainer: {
     alignItems: 'center',

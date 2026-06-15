@@ -13,6 +13,7 @@ const {
 const authMiddleware = require("../middleware/auth");
 const adminMiddleware = require("../middleware/admin");
 const { getSuperAdminMobile, isSuperAdminMobile } = require("../constants/admin");
+const { MASJID_UNKNOWN } = require("../constants");
 const { ACTIVE, findLinkedPersonByMobile } = require("../utils/directory");
 const { sendAdminGrantedSms } = require("../services/sms");
 
@@ -222,6 +223,9 @@ router.post("/masjids", async (req, res, next) => {
     if (name.length < 2) {
       throw new AppError("মসজিদের নাম দিন");
     }
+    if (name === MASJID_UNKNOWN) {
+      throw new AppError("এই নামটি সংরক্ষিত, অন্য নাম ব্যবহার করুন");
+    }
 
     const existing = await Masjid.findOne({ name });
     if (existing) {
@@ -233,6 +237,56 @@ router.post("/masjids", async (req, res, next) => {
     res.status(201).json({
       success: true,
       message: "মসজিদ যোগ করা হয়েছে",
+      data: { id: masjid._id, name: masjid.name },
+    });
+  } catch (err) {
+    if (err.code === 11000) {
+      return next(new AppError("এই মসজিদ ইতিমধ্যে আছে"));
+    }
+    next(err);
+  }
+});
+
+router.patch("/masjids/:id", async (req, res, next) => {
+  try {
+    const name = String(req.body.name || "").trim();
+    if (name.length < 2) {
+      throw new AppError("মসজিদের নাম দিন");
+    }
+    if (name === MASJID_UNKNOWN) {
+      throw new AppError("এই নামটি সংরক্ষিত, অন্য নাম ব্যবহার করুন");
+    }
+
+    const masjid = await Masjid.findById(req.params.id);
+    if (!masjid) {
+      throw new AppError("মসজিদ পাওয়া যায়নি", 404);
+    }
+
+    const oldName = masjid.name;
+    if (oldName === name) {
+      return res.json({
+        success: true,
+        message: "মসজিদের নাম আপডেট করা হয়েছে",
+        data: { id: masjid._id, name: masjid.name },
+      });
+    }
+
+    const existing = await Masjid.findOne({ name });
+    if (existing) {
+      throw new AppError("এই মসজিদ ইতিমধ্যে আছে");
+    }
+
+    masjid.name = name;
+    await masjid.save();
+
+    await Promise.all([
+      Person.updateMany({ masjid: oldName }, { $set: { masjid: name } }),
+      Account.updateMany({ masjid: oldName }, { $set: { masjid: name } }),
+    ]);
+
+    res.json({
+      success: true,
+      message: "মসজিদের নাম আপডেট করা হয়েছে",
       data: { id: masjid._id, name: masjid.name },
     });
   } catch (err) {
@@ -302,6 +356,50 @@ router.post("/schools", async (req, res, next) => {
     res.status(201).json({
       success: true,
       message: "স্কুল যোগ করা হয়েছে",
+      data: { id: school._id, name: school.name },
+    });
+  } catch (err) {
+    if (err.code === 11000) {
+      return next(new AppError("এই স্কুল ইতিমধ্যে আছে"));
+    }
+    next(err);
+  }
+});
+
+router.patch("/schools/:id", async (req, res, next) => {
+  try {
+    const name = String(req.body.name || "").trim();
+    if (name.length < 2) {
+      throw new AppError("স্কুলের নাম দিন");
+    }
+
+    const school = await School.findOne({ _id: req.params.id, isDeleted: ACTIVE });
+    if (!school) {
+      throw new AppError("স্কুল পাওয়া যায়নি", 404);
+    }
+
+    const oldName = school.name;
+    if (oldName === name) {
+      return res.json({
+        success: true,
+        message: "স্কুলের নাম আপডেট করা হয়েছে",
+        data: { id: school._id, name: school.name },
+      });
+    }
+
+    const existing = await School.findOne({ name, isDeleted: ACTIVE });
+    if (existing) {
+      throw new AppError("এই স্কুল ইতিমধ্যে আছে");
+    }
+
+    school.name = name;
+    await school.save();
+
+    await Person.updateMany({ schoolName: oldName }, { $set: { schoolName: name } });
+
+    res.json({
+      success: true,
+      message: "স্কুলের নাম আপডেট করা হয়েছে",
       data: { id: school._id, name: school.name },
     });
   } catch (err) {

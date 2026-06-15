@@ -19,6 +19,7 @@ import { useAuth } from '../context/AuthContext';
 import { displayMobile } from '../lib/mobile';
 import api from '../lib/api';
 import { appAlert } from '../lib/appAlert';
+import { buildMasjidSelectOptions } from '../lib/masjid';
 import { colors, radius, shadows, spacing } from '../theme';
 
 function ProfilePinField({
@@ -158,7 +159,7 @@ export default function ProfileScreen() {
               label="মসজিদ *"
               value={form.masjid}
               onValueChange={(v) => update('masjid', v)}
-              options={masjids.map((m) => ({ label: m, value: m }))}
+              options={buildMasjidSelectOptions(masjids)}
             />
             <InputField
               label="বাসার ঠিকানা"

@@ -8,6 +8,8 @@ import {
   Platform,
   FlatList,
   TextInput,
+  ScrollView,
+  Dimensions,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
@@ -19,8 +21,10 @@ import { SelectField } from '../components/SelectField';
 import { AppText } from '../components/AppText';
 import { useDirectorySearch } from '../hooks/useDirectorySearch';
 import api from '../lib/api';
+import { RecentKarguzari } from '../lib/directory';
 import { displayMobile } from '../lib/mobile';
-import { STUDENT_CLASS_OPTIONS } from '../constants/options';
+import { MASTURAT_DAYS_OPTIONS, STUDENT_CLASS_FILTER_OPTIONS, TIME_GIVEN_OPTIONS } from '../constants/options';
+import { buildMasjidSelectOptions } from '../lib/masjid';
 import { colors, radius, shadows, spacing } from '../theme';
 
 const BENGALI_MONTHS = [
@@ -32,6 +36,140 @@ function formatKarguzariDate(isoDate: string): string {
   const d = new Date(isoDate);
   if (isNaN(d.getTime())) return '';
   return `${d.getDate()} ${BENGALI_MONTHS[d.getMonth()]}`;
+}
+
+function getKarguzariTheme(isSathi: boolean) {
+  if (isSathi) {
+    return {
+      accent: '#B8860B',
+      accentDark: '#92610A',
+      title: '#7A5A08',
+      label: '#9A8668',
+      labelIcon: '#B89B5E',
+      value: '#134E45',
+      dateBg: 'rgba(184,134,11,0.16)',
+      timeBg: 'rgba(184,134,11,0.1)',
+      timeText: '#A67C00',
+      chipBg: '#FFFFFF',
+      chipBorder: 'rgba(184,134,11,0.35)',
+      chipText: '#734E0A',
+      body: '#3F3A34',
+      itemBg: 'rgba(255,255,255,0.55)',
+      itemBorder: 'rgba(184,134,11,0.18)',
+    };
+  }
+  return {
+    accent: '#6D28D9',
+    accentDark: '#5B21B6',
+    title: '#5B21B6',
+    label: '#8B7AA8',
+    labelIcon: '#9B7FD4',
+    value: '#4C1D95',
+    dateBg: 'rgba(109,40,217,0.14)',
+    timeBg: 'rgba(109,40,217,0.09)',
+    timeText: '#6D28D9',
+    chipBg: '#FFFFFF',
+    chipBorder: 'rgba(109,40,217,0.28)',
+    chipText: '#5B21B6',
+    body: '#3A3548',
+    itemBg: 'rgba(255,255,255,0.6)',
+    itemBorder: 'rgba(109,40,217,0.16)',
+  };
+}
+
+function RecentKarguzariPreviewItem({
+  k,
+  isSathi,
+}: {
+  k: RecentKarguzari;
+  isSathi: boolean;
+}) {
+  const theme = getKarguzariTheme(isSathi);
+  const attendees = k.attendeeNames ?? [];
+
+  return (
+    <View
+      style={[
+        styles.karguzariItem,
+        { backgroundColor: theme.itemBg, borderColor: theme.itemBorder },
+      ]}
+    >
+      <View style={styles.karguzariItemHeader}>
+        <View style={[styles.karguzariDateBadge, { backgroundColor: theme.dateBg }]}>
+          <Ionicons name="calendar-outline" size={12} color={theme.accentDark} />
+          <AppText style={[styles.karguzariDate, { color: theme.accentDark }]}>
+            {formatKarguzariDate(k.meetingDate)}
+          </AppText>
+        </View>
+        {k.timeSlot ? (
+          <View style={[styles.karguzariTimeBadge, { backgroundColor: theme.timeBg }]}>
+            <AppText style={[styles.karguzariTimeText, { color: theme.timeText }]}>
+              {k.timeSlot}
+            </AppText>
+          </View>
+        ) : null}
+      </View>
+
+      <View style={styles.karguzariMetaRow}>
+        <View style={styles.karguzariLabelGroup}>
+          <Ionicons name="create-outline" size={13} color={theme.labelIcon} />
+          <AppText style={[styles.karguzariLabel, { color: theme.label }]}>
+            লিখেছেন
+          </AppText>
+        </View>
+        <AppText
+          style={[styles.karguzariMetaValue, { color: theme.value }]}
+          numberOfLines={1}
+        >
+          {k.author?.name || '—'}
+        </AppText>
+      </View>
+
+      {attendees.length > 0 ? (
+        <View style={styles.karguzariAttendeeRow}>
+          <View style={styles.karguzariLabelGroup}>
+            <Ionicons name="people-outline" size={13} color={theme.labelIcon} />
+            <AppText style={[styles.karguzariLabel, { color: theme.label }]}>
+              উপস্থিত
+            </AppText>
+          </View>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={styles.karguzariAttendeeScroll}
+            contentContainerStyle={styles.karguzariAttendeeScrollContent}
+          >
+            {attendees.map((name) => (
+              <View
+                key={name}
+                style={[
+                  styles.karguzariAttendeeChip,
+                  {
+                    backgroundColor: theme.chipBg,
+                    borderColor: theme.chipBorder,
+                  },
+                ]}
+              >
+                <AppText
+                  style={[styles.karguzariAttendeeChipText, { color: theme.chipText }]}
+                  numberOfLines={1}
+                >
+                  {name}
+                </AppText>
+              </View>
+            ))}
+          </ScrollView>
+        </View>
+      ) : null}
+
+      <AppText
+        style={[styles.karguzariText, { color: theme.body }]}
+        numberOfLines={3}
+      >
+        {k.text}
+      </AppText>
+    </View>
+  );
 }
 
 export default function KarguzariSelectScreen() {
@@ -132,8 +270,15 @@ export default function KarguzariSelectScreen() {
               </TouchableOpacity>
             ) : null}
           </View>
-          <SelectField
-            label="ধরন"
+          <ScrollView
+            style={styles.filterScroll}
+            contentContainerStyle={styles.filterScrollContent}
+            nestedScrollEnabled
+            showsVerticalScrollIndicator
+            keyboardShouldPersistTaps="handled"
+          >
+            <SelectField
+              label="ধরন"
             value={filters.type || null}
             onValueChange={(v) => update('type', v || '')}
             options={[
@@ -141,12 +286,13 @@ export default function KarguzariSelectScreen() {
               { label: 'ছাত্র', value: 'student' },
             ]}
             placeholder="সব"
+            placeholderSelectable
           />
           <SelectField
             label="ক্লাস"
             value={filters.classValue}
             onValueChange={(v) => update('classValue', v)}
-            options={STUDENT_CLASS_OPTIONS}
+            options={STUDENT_CLASS_FILTER_OPTIONS}
           />
           <SelectField
             label="স্কুলের নাম"
@@ -158,8 +304,32 @@ export default function KarguzariSelectScreen() {
             label="মসজিদ"
             value={filters.masjid}
             onValueChange={(v) => update('masjid', v)}
-            options={masjids.map((m) => ({ label: m, value: m }))}
+            options={buildMasjidSelectOptions(masjids)}
           />
+          <SelectField
+            label="অ্যাকাউন্ট দাবি"
+            value={filters.claimedStatus || null}
+            onValueChange={(v) => update('claimedStatus', v || '')}
+            options={[
+              { label: 'দাবিকৃত', value: 'claimed' },
+              { label: 'অদাবিকৃত', value: 'unclaimed' },
+            ]}
+            placeholder="সব"
+            placeholderSelectable
+          />
+          <SelectField
+            label="এর আগে সময় দিয়েছেন"
+            value={filters.timeGivenValue}
+            onValueChange={(v) => update('timeGivenValue', v)}
+            options={TIME_GIVEN_OPTIONS}
+          />
+          <SelectField
+            label="মাস্তুরাতে সময় দিয়েছেন"
+            value={filters.masturatDaysValue}
+            onValueChange={(v) => update('masturatDaysValue', v)}
+            options={MASTURAT_DAYS_OPTIONS}
+          />
+          </ScrollView>
         </View>
       )}
 
@@ -338,47 +508,45 @@ export default function KarguzariSelectScreen() {
                                 : styles.karguzariPreviewStudent,
                             ]}
                           >
-                            <View style={styles.karguzariPreviewHeader}>
-                              <Ionicons
-                                name="time-outline"
-                                size={12}
-                                color={isSathi ? '#B8860B' : '#6D28D9'}
-                              />
-                              <AppText
+                            <View
+                              style={[
+                                styles.karguzariPreviewHeader,
+                                isSathi
+                                  ? styles.karguzariPreviewHeaderSathi
+                                  : styles.karguzariPreviewHeaderStudent,
+                              ]}
+                            >
+                              <View
                                 style={[
-                                  styles.karguzariPreviewLabel,
+                                  styles.karguzariPreviewTitleBadge,
                                   isSathi
-                                    ? styles.karguzariLabelSathi
-                                    : styles.karguzariLabelStudent,
+                                    ? styles.karguzariPreviewTitleBadgeSathi
+                                    : styles.karguzariPreviewTitleBadgeStudent,
                                 ]}
                               >
-                                সাম্প্রতিক কারগুজারি
-                              </AppText>
+                                <Ionicons
+                                  name="time-outline"
+                                  size={13}
+                                  color={isSathi ? '#92610A' : '#5B21B6'}
+                                />
+                                <AppText
+                                  style={[
+                                    styles.karguzariPreviewLabel,
+                                    isSathi
+                                      ? styles.karguzariLabelSathi
+                                      : styles.karguzariLabelStudent,
+                                  ]}
+                                >
+                                  সাম্প্রতিক কারগুজারি
+                                </AppText>
+                              </View>
                             </View>
                             {recentKarguzari.map((k, idx) => (
                               <View
                                 key={k._id}
-                                style={[
-                                  styles.karguzariItem,
-                                  idx > 0 && styles.karguzariItemDivider,
-                                ]}
+                                style={idx > 0 && styles.karguzariItemDivider}
                               >
-                                <AppText
-                                  style={[
-                                    styles.karguzariDate,
-                                    isSathi
-                                      ? styles.karguzariDateSathi
-                                      : styles.karguzariDateStudent,
-                                  ]}
-                                >
-                                  {formatKarguzariDate(k.meetingDate)}
-                                </AppText>
-                                <AppText
-                                  style={styles.karguzariText}
-                                  numberOfLines={4}
-                                >
-                                  {k.text}
-                                </AppText>
+                                <RecentKarguzariPreviewItem k={k} isSathi={isSathi} />
                               </View>
                             ))}
                           </View>
@@ -487,6 +655,13 @@ const styles = StyleSheet.create({
     marginBottom: spacing.sm,
     borderWidth: 1,
     borderColor: 'rgba(46, 134, 171, 0.12)',
+    overflow: 'hidden',
+  },
+  filterScroll: {
+    maxHeight: Math.min(340, Dimensions.get('window').height * 0.38),
+  },
+  filterScrollContent: {
+    paddingBottom: spacing.xs,
   },
   filterPanelHeader: {
     flexDirection: 'row',
@@ -650,9 +825,9 @@ const styles = StyleSheet.create({
     marginTop: 4,
     paddingTop: 10,
     paddingBottom: 10,
-    paddingHorizontal: 12,
+    paddingHorizontal: 10,
     borderRadius: radius.md,
-    gap: 8,
+    gap: 6,
     borderWidth: 1,
   },
   karguzariPreviewSathi: {
@@ -664,36 +839,125 @@ const styles = StyleSheet.create({
     borderColor: '#B794F6',
   },
   karguzariPreviewHeader: {
+    paddingBottom: 6,
+    marginBottom: 2,
+    borderBottomWidth: 1,
+  },
+  karguzariPreviewHeaderSathi: {
+    borderBottomColor: 'rgba(184,134,11,0.2)',
+  },
+  karguzariPreviewHeaderStudent: {
+    borderBottomColor: 'rgba(109,40,217,0.18)',
+  },
+  karguzariPreviewTitleBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    gap: 5,
+    borderRadius: 20,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  karguzariPreviewTitleBadgeSathi: {
+    backgroundColor: 'rgba(184,134,11,0.14)',
+  },
+  karguzariPreviewTitleBadgeStudent: {
+    backgroundColor: 'rgba(109,40,217,0.12)',
+  },
+  karguzariPreviewLabel: {
+    fontFamily: 'HindSiliguri_700Bold',
+    fontSize: 12,
+    letterSpacing: 0.3,
+  },
+  karguzariLabelSathi: { color: '#92610A' },
+  karguzariLabelStudent: { color: '#5B21B6' },
+  karguzariItem: {
+    gap: 7,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    borderRadius: radius.sm,
+    borderWidth: 1,
+  },
+  karguzariItemDivider: {
+    marginTop: 6,
+  },
+  karguzariItemHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  karguzariDateBadge: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    marginBottom: 2,
+    borderRadius: radius.sm,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
   },
-  karguzariPreviewLabel: {
+  karguzariTimeBadge: {
+    borderRadius: radius.sm,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
+  karguzariTimeText: {
+    fontFamily: 'HindSiliguri_600SemiBold',
+    fontSize: 11,
+  },
+  karguzariMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    minHeight: 22,
+  },
+  karguzariAttendeeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    height: 26,
+  },
+  karguzariLabelGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    flexShrink: 0,
+  },
+  karguzariLabel: {
     fontFamily: 'HindSiliguri_600SemiBold',
     fontSize: 11,
     letterSpacing: 0.2,
   },
-  karguzariLabelSathi: { color: '#B8860B' },
-  karguzariLabelStudent: { color: '#6D28D9' },
-  karguzariItem: {
-    gap: 4,
+  karguzariMetaValue: {
+    fontFamily: 'HindSiliguri_700Bold',
+    fontSize: 13,
+    flex: 1,
   },
-  karguzariItemDivider: {
-    paddingTop: 8,
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(0,0,0,0.08)',
+  karguzariAttendeeScroll: {
+    flex: 1,
+  },
+  karguzariAttendeeScrollContent: {
+    alignItems: 'center',
+    gap: 5,
+    paddingRight: 4,
+  },
+  karguzariAttendeeChip: {
+    borderRadius: 14,
+    paddingHorizontal: 9,
+    paddingVertical: 3,
+    borderWidth: 1,
+    maxWidth: 140,
+  },
+  karguzariAttendeeChipText: {
+    fontFamily: 'HindSiliguri_600SemiBold',
+    fontSize: 11,
   },
   karguzariDate: {
     fontFamily: 'HindSiliguri_700Bold',
     fontSize: 12,
   },
-  karguzariDateSathi: { color: '#92610A' },
-  karguzariDateStudent: { color: '#5B21B6' },
   karguzariText: {
     fontFamily: 'HindSiliguri_400Regular',
     fontSize: 13,
-    lineHeight: 20,
-    color: '#3D3D3D',
+    lineHeight: 19,
+    marginTop: 1,
   },
 });

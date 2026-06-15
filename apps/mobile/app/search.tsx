@@ -8,6 +8,8 @@ import {
   Platform,
   FlatList,
   TextInput,
+  ScrollView,
+  Dimensions,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
@@ -26,8 +28,9 @@ import { useBatchSmsSelectionOptional } from "../context/BatchSmsContext";
 import { useDirectorySearch, type DirectorySearchFilters } from "../hooks/useDirectorySearch";
 import api from "../lib/api";
 import { appAlert } from "../lib/appAlert";
+import { buildMasjidSelectOptions } from "../lib/masjid";
 import { displayMobile } from "../lib/mobile";
-import { STUDENT_CLASS_OPTIONS } from "../constants/options";
+import { MASTURAT_DAYS_OPTIONS, STUDENT_CLASS_FILTER_OPTIONS, TIME_GIVEN_OPTIONS } from "../constants/options";
 import { colors, radius, shadows, spacing } from "../theme";
 
 type DirectoryEntry = {
@@ -231,8 +234,15 @@ export default function SearchScreen() {
               </TouchableOpacity>
             ) : null}
           </View>
-          <SelectField
-            label="ধরন"
+          <ScrollView
+            style={styles.filterScroll}
+            contentContainerStyle={styles.filterScrollContent}
+            nestedScrollEnabled
+            showsVerticalScrollIndicator
+            keyboardShouldPersistTaps="handled"
+          >
+            <SelectField
+              label="ধরন"
             value={filters.type || null}
             onValueChange={(v) => update("type", v || "")}
             options={[
@@ -240,12 +250,13 @@ export default function SearchScreen() {
               { label: "ছাত্র", value: "student" },
             ]}
             placeholder="সব"
+            placeholderSelectable
           />
           <SelectField
             label="ক্লাস"
             value={filters.classValue}
             onValueChange={(v) => update("classValue", v)}
-            options={STUDENT_CLASS_OPTIONS}
+            options={STUDENT_CLASS_FILTER_OPTIONS}
           />
           <SelectField
             label="স্কুলের নাম"
@@ -257,8 +268,32 @@ export default function SearchScreen() {
             label="মসজিদ"
             value={filters.masjid}
             onValueChange={(v) => update("masjid", v)}
-            options={masjids.map((m) => ({ label: m, value: m }))}
+            options={buildMasjidSelectOptions(masjids)}
           />
+          <SelectField
+            label="অ্যাকাউন্ট দাবি"
+            value={filters.claimedStatus || null}
+            onValueChange={(v) => update("claimedStatus", v || "")}
+            options={[
+              { label: "দাবিকৃত", value: "claimed" },
+              { label: "অদাবিকৃত", value: "unclaimed" },
+            ]}
+            placeholder="সব"
+            placeholderSelectable
+          />
+          <SelectField
+            label="এর আগে সময় দিয়েছেন"
+            value={filters.timeGivenValue}
+            onValueChange={(v) => update("timeGivenValue", v)}
+            options={TIME_GIVEN_OPTIONS}
+          />
+          <SelectField
+            label="মাস্তুরাতে সময় দিয়েছেন"
+            value={filters.masturatDaysValue}
+            onValueChange={(v) => update("masturatDaysValue", v)}
+            options={MASTURAT_DAYS_OPTIONS}
+          />
+          </ScrollView>
         </View>
       )}
 
@@ -698,6 +733,13 @@ const styles = StyleSheet.create({
     marginBottom: spacing.sm,
     borderWidth: 1,
     borderColor: "rgba(46, 134, 171, 0.12)",
+    overflow: "hidden",
+  },
+  filterScroll: {
+    maxHeight: Math.min(340, Dimensions.get("window").height * 0.38),
+  },
+  filterScrollContent: {
+    paddingBottom: spacing.xs,
   },
   filterPanelHeader: {
     flexDirection: "row",

@@ -1,9 +1,12 @@
 const Masjid = require('../models/Masjid');
+const { MASJID_UNKNOWN } = require('../constants');
 
 async function isValidMasjid(name) {
-  if (!name || !String(name).trim()) return false;
-  const exists = await Masjid.findOne({ name: String(name).trim() });
+  const trimmed = String(name || '').trim();
+  if (!trimmed) return false;
+  if (trimmed === MASJID_UNKNOWN) return true;
+  const exists = await Masjid.findOne({ name: trimmed });
   return !!exists;
 }
 
-module.exports = { isValidMasjid };
+module.exports = { isValidMasjid, MASJID_UNKNOWN };

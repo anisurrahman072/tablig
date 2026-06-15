@@ -18,13 +18,7 @@ type AuthContextType = {
   token: string | null;
   loading: boolean;
   login: (mobile: string, pin: string) => Promise<void>;
-  signup: (data: {
-    name: string;
-    houseAddress?: string;
-    masjid: string;
-    mobile: string;
-    pin: string;
-  }) => Promise<void>;
+  verifySignup: (requestId: string, code: string) => Promise<void>;
   logout: () => Promise<void>;
   refreshAccount: () => Promise<void>;
 };
@@ -77,14 +71,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await persistAuth(res.data.data.token, res.data.data.account);
   }, [persistAuth]);
 
-  const signup = useCallback(async (data: {
-    name: string;
-    houseAddress?: string;
-    masjid: string;
-    mobile: string;
-    pin: string;
-  }) => {
-    const res = await api.post('/auth/signup', data);
+  const verifySignup = useCallback(async (requestId: string, code: string) => {
+    const res = await api.post('/auth/signup/verify', { requestId, code });
     await persistAuth(res.data.data.token, res.data.data.account);
   }, [persistAuth]);
 
@@ -105,8 +93,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [token]);
 
   const value = useMemo(
-    () => ({ account, token, loading, login, signup, logout, refreshAccount }),
-    [account, token, loading, login, signup, logout, refreshAccount]
+    () => ({ account, token, loading, login, verifySignup, logout, refreshAccount }),
+    [account, token, loading, login, verifySignup, logout, refreshAccount]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

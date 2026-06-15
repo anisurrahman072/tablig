@@ -10,6 +10,9 @@ export type DirectorySearchFilters = {
   classValue: number | null;
   schoolName: string;
   masjid: string | null;
+  claimedStatus: "" | "claimed" | "unclaimed";
+  timeGivenValue: number | null;
+  masturatDaysValue: number | null;
 };
 
 export const EMPTY_DIRECTORY_FILTERS: DirectorySearchFilters = {
@@ -18,6 +21,9 @@ export const EMPTY_DIRECTORY_FILTERS: DirectorySearchFilters = {
   classValue: null,
   schoolName: "",
   masjid: null,
+  claimedStatus: "",
+  timeGivenValue: null,
+  masturatDaysValue: null,
 };
 
 type Options = {
@@ -41,7 +47,10 @@ function hasSearchCriteria(filters: DirectorySearchFilters) {
     filters.type ||
     filters.classValue != null ||
     filters.schoolName ||
-    filters.masjid
+    filters.masjid ||
+    filters.claimedStatus ||
+    filters.timeGivenValue != null ||
+    filters.masturatDaysValue != null
   );
 }
 
@@ -60,6 +69,9 @@ function buildParams(
   if (filters.classValue != null) params.classValue = filters.classValue;
   if (filters.schoolName) params.schoolName = filters.schoolName;
   if (filters.masjid) params.masjid = filters.masjid;
+  if (filters.claimedStatus) params.claimedStatus = filters.claimedStatus;
+  if (filters.timeGivenValue != null) params.timeGivenValue = filters.timeGivenValue;
+  if (filters.masturatDaysValue != null) params.masturatDaysValue = filters.masturatDaysValue;
   return params;
 }
 

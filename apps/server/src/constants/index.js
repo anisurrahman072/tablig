@@ -1,3 +1,5 @@
+const MASJID_UNKNOWN = 'মসজিদ জানা নেই';
+
 const MASJIDS = [
   'বাউনিয়া বাজার মসজিদ',
   'করিমবাগ মসজিদ',
@@ -10,6 +12,7 @@ const TIME_GIVEN_OPTIONS = [
   { label: 'দশ দিন', value: 10 },
   { label: 'এক চিল্লা', value: 40 },
   { label: 'তিন চিল্লা', value: 120 },
+  { label: 'এক সাল', value: 365 },
   { label: 'বিদেশ সফর', value: 200 },
   { label: 'সময় দেওয়া হয়নি', value: 0 },
 ];
@@ -37,6 +40,10 @@ const STUDENT_CLASS_OPTIONS = [
   { label: 'উইনিভার্সিটি - ফোর্থ ইয়ার', value: 12 },
 ];
 
+/** Filter-only: matches all university year classes (9–12). Not stored on persons. */
+const UNIVERSITY_CLASS_FILTER_VALUE = 13;
+const UNIVERSITY_CLASS_YEAR_VALUES = [9, 10, 11, 12];
+
 const KARGUZARI_TIME_SLOTS = [
   'ফজরের পরে',
   'দশটার দিকে',
@@ -49,10 +56,13 @@ const KARGUZARI_TIME_SLOTS = [
 const PERSON_TYPES = ['sathi', 'student'];
 
 module.exports = {
+  MASJID_UNKNOWN,
   MASJIDS,
   TIME_GIVEN_OPTIONS,
   MASTURAT_DAYS_OPTIONS,
   STUDENT_CLASS_OPTIONS,
+  UNIVERSITY_CLASS_FILTER_VALUE,
+  UNIVERSITY_CLASS_YEAR_VALUES,
   KARGUZARI_TIME_SLOTS,
   PERSON_TYPES,
 };

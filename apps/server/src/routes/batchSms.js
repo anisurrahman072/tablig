@@ -260,4 +260,63 @@ router.post('/:id/retry', async (req, res, next) => {
   }
 });
 
+router.post('/:id/resend', async (req, res, next) => {
+  try {
+    const source = await BatchSmsLog.findById(req.params.id);
+    if (!source) {
+      throw new AppError('ব্যাচ পাওয়া যায়নি', 404);
+    }
+
+    const validation = validateCustomUserSmsMessage(source.message);
+    if (!validation.ok) {
+      throw new AppError(validation.error, 400);
+    }
+
+    const recipients = source.recipients
+      .filter((r) => r.status !== 'skipped' && r.mobile)
+      .map((r) => ({
+        targetId: r.targetId,
+        personId: r.personId,
+        name: r.name,
+        mobile: r.mobile,
+        type: r.type || 'sathi',
+        status: 'pending',
+        errorMessage: '',
+      }));
+
+    if (recipients.length === 0) {
+      throw new AppError('পুনরায় পাঠানোর মতো কোনো গ্রহীতা নেই', 400);
+    }
+
+    const { fullMessage, limits } = validation;
+
+    const batch = await BatchSmsLog.create({
+      sender: req.account._id,
+      message: fullMessage,
+      encoding: limits.encoding,
+      smsParts: limits.parts,
+      charCount: fullMessage.length,
+      status: 'pending',
+      totalRecipients: recipients.length,
+      sentCount: 0,
+      failedCount: 0,
+      skippedCount: 0,
+      recipients,
+      parentBatch: source._id,
+    });
+
+    await batch.populate('sender', 'name');
+
+    res.status(201).json({ success: true, data: batch });
+
+    setImmediate(() => {
+      processBatch(batch._id, req.account._id, false).catch((err) => {
+        console.error('[BatchSMS] পুনরায় সবাইকে পাঠানো ব্যর্থ:', err.message);
+      });
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
 module.exports = router;

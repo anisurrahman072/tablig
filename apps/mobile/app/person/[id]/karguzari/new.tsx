@@ -5,6 +5,7 @@ import {
   Platform,
   View,
   ActivityIndicator,
+  ScrollView,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -23,7 +24,10 @@ import { appAlert } from '../../../../lib/appAlert';
 import { PersonSearchMultiSelect, SelectedAttendee } from '../../../../components/PersonSearchMultiSelect';
 import { KeyboardFormScroll } from '../../../../components/KeyboardFormScroll';
 import { KARGUZARI_TIME_SLOTS } from '../../../../constants/options';
+import { KarguzariPremiumSection } from '../../../../components/KarguzariPremiumSection';
 import { colors, radius, spacing, shadows } from '../../../../theme';
+
+type TabKey = 'write' | 'history';
 
 export default function NewKarguzariScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -38,6 +42,8 @@ export default function NewKarguzariScreen() {
   const [loading, setLoading] = useState(false);
   const [visitedName, setVisitedName] = useState<string | null>(null);
   const [visitedType, setVisitedType] = useState<'sathi' | 'student' | null>(null);
+  const [activeTab, setActiveTab] = useState<TabKey>('write');
+  const [karguzariRefreshToken, setKarguzariRefreshToken] = useState(0);
 
   useEffect(() => {
     if (!id) return;
@@ -78,6 +84,7 @@ export default function NewKarguzariScreen() {
         attendeeIds: attendees.map((a) => a.id),
         attendeeNames,
       });
+      setKarguzariRefreshToken((t) => t + 1);
       appAlert('সফল', 'কারগুজারি সংরক্ষিত', [
         { text: 'ঠিক আছে', onPress: () => router.back() },
       ]);
@@ -88,12 +95,42 @@ export default function NewKarguzariScreen() {
     }
   }
 
+  const personName = visitedName ?? '...';
+  const tabLabels = {
+    write: 'কারগুজারি যোগ করুন',
+    history: 'আগের কারগুজারি দেখুন',
+  } as const;
+
   return (
     <GradientBackground>
       <SafeAreaView style={styles.safe}>
-        <KeyboardFormScroll contentContainerStyle={styles.content}>
-            <ScreenHeader title="কারগুজারি যোগ করুন" />
+        <View style={styles.topSection}>
+          <ScreenHeader title={tabLabels[activeTab]} />
 
+          <View style={styles.tabBar}>
+            <TouchableOpacity
+              style={[styles.tab, activeTab === 'write' && styles.tabActive]}
+              onPress={() => setActiveTab('write')}
+              activeOpacity={0.8}
+            >
+              <AppText style={[styles.tabText, activeTab === 'write' && styles.tabTextActive]}>
+                {tabLabels.write}
+              </AppText>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.tab, activeTab === 'history' && styles.tabActive]}
+              onPress={() => setActiveTab('history')}
+              activeOpacity={0.8}
+            >
+              <AppText style={[styles.tabText, activeTab === 'history' && styles.tabTextActive]}>
+                {tabLabels.history}
+              </AppText>
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        {activeTab === 'write' ? (
+        <KeyboardFormScroll contentContainerStyle={styles.content}>
             <LinearGradient
               colors={['#2E86AB', '#48C9B0']}
               start={{ x: 0, y: 0 }}
@@ -187,6 +224,57 @@ export default function NewKarguzariScreen() {
 
             <PrimaryButton title="সংরক্ষণ করুন" onPress={handleSubmit} loading={loading} />
         </KeyboardFormScroll>
+        ) : id ? (
+          <ScrollView
+            contentContainerStyle={styles.historyContent}
+            showsVerticalScrollIndicator={false}
+          >
+            <KarguzariPremiumSection
+              personId={id}
+              endpoint="received"
+              title={`${personName} এর সাথে সাক্ষাত হয়েছে`}
+              subtitle="যারা এই ব্যক্তির সাথে সাক্ষাৎ করেছেন এবং তারা কারগুজারি লিখেছেন"
+              emptyText="এখনো কেউ কারগুজারি লিখেননি"
+              headerColors={['#2E86AB', '#48C9B0']}
+              icon="hand-left-outline"
+              cardTint="#E8F6FC"
+              cardBorder="rgba(46, 134, 171, 0.18)"
+              accentColor="#2E86AB"
+              refreshToken={karguzariRefreshToken}
+              style={styles.firstSection}
+            />
+
+            <KarguzariPremiumSection
+              personId={id}
+              endpoint="authored"
+              title={`${personName} যাদের উপর মেহনত করেছেন`}
+              subtitle="এই ব্যক্তি নিজে যাদের সাথে সাক্ষাত করে কারগুজারি লিখেছেন"
+              emptyText="এখনো কারগুজারি যোগ করা হয়নি"
+              headerColors={['#A23B72', '#E056A0']}
+              icon="create-outline"
+              cardTint="#F9EDF5"
+              cardBorder="rgba(162, 59, 114, 0.16)"
+              accentColor="#A23B72"
+              showVisitedPerson
+              refreshToken={karguzariRefreshToken}
+            />
+
+            <KarguzariPremiumSection
+              personId={id}
+              endpoint="attended"
+              title={`${personName} মেহনতে উপস্থিত ছিলেন`}
+              subtitle="অন্যের সাক্ষাতে উপস্থিত থাকার রেকর্ড"
+              emptyText="মেহনতে উপস্থিত থাকার কোনো রেকর্ড নেই"
+              headerColors={['#F18F01', '#FFB347']}
+              icon="people-outline"
+              cardTint="#FFF4E6"
+              cardBorder="rgba(241, 143, 1, 0.2)"
+              accentColor="#F18F01"
+              showVisitedPerson
+              refreshToken={karguzariRefreshToken}
+            />
+          </ScrollView>
+        ) : null}
       </SafeAreaView>
     </GradientBackground>
   );
@@ -194,7 +282,52 @@ export default function NewKarguzariScreen() {
 
 const styles = StyleSheet.create({
   safe: { flex: 1 },
-  content: { padding: spacing.lg, paddingBottom: 40 },
+  topSection: {
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.lg,
+  },
+  tabBar: {
+    flexDirection: 'row',
+    backgroundColor: colors.card,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: 4,
+    marginBottom: spacing.sm,
+    gap: 4,
+  },
+  tab: {
+    flex: 1,
+    paddingVertical: 10,
+    paddingHorizontal: 6,
+    borderRadius: radius.sm,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  tabActive: {
+    backgroundColor: colors.primary,
+    ...shadows.card,
+    shadowOpacity: 0.15,
+    elevation: 3,
+  },
+  tabText: {
+    fontFamily: 'HindSiliguri_600SemiBold',
+    fontSize: 12,
+    color: colors.textLight,
+    textAlign: 'center',
+    lineHeight: 17,
+  },
+  tabTextActive: {
+    color: '#FFFFFF',
+  },
+  content: { padding: spacing.lg, paddingTop: spacing.sm, paddingBottom: 40 },
+  historyContent: {
+    paddingHorizontal: spacing.lg,
+    paddingBottom: 40,
+  },
+  firstSection: {
+    marginTop: spacing.sm,
+  },
   visitBanner: {
     flexDirection: 'row',
     alignItems: 'center',
