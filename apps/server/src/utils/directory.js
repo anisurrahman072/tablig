@@ -14,6 +14,28 @@ const {
   queryMatchesSathiKeyword,
   queryMatchesStudentKeyword,
 } = require('./search');
+const { normalizeMobile } = require('./mobile');
+
+/**
+ * Safely normalize a mobile string. Returns '' for falsy input.
+ * Used for deduplication comparisons so that legacy Person records
+ * stored in local format ("01781018215") match Account records stored
+ * in international format ("8801781018215").
+ */
+function normMob(m) {
+  return m ? normalizeMobile(m) : '';
+}
+
+/**
+ * Build a MongoDB mobile query that matches BOTH the normalized
+ * international format AND the local 0XX format, so that legacy
+ * Person records stored without normalization are still found.
+ */
+function mobileQuery(normalized) {
+  if (!normalized) return normalized;
+  const local = normalized.startsWith('880') ? `0${normalized.slice(3)}` : null;
+  return local && local !== normalized ? { $in: [normalized, local] } : normalized;
+}
 
 const ACTIVE = { $ne: true };
 
@@ -40,7 +62,8 @@ function pickLinkedPerson(persons, accountId = null) {
 async function findLinkedPersonByMobile(mobile, accountId = null) {
   if (!mobile) return null;
 
-  const persons = await Person.find({ mobile, isDeleted: ACTIVE })
+  const normalized = normMob(mobile);
+  const persons = await Person.find({ mobile: mobileQuery(normalized), isDeleted: ACTIVE })
     .populate(personPopulate)
     .sort({ updatedAt: -1 });
 
@@ -97,19 +120,28 @@ async function findLinkedPersonsForAccounts(accounts) {
   const mobiles = [...new Set(accounts.map((a) => a.mobile).filter(Boolean))];
   const accountIds = accounts.map((a) => a._id);
 
+  // Include both normalized and local formats so legacy Person records
+  // (stored before mobile normalization was enforced) are still found.
+  const allMobileFormats = new Set();
+  for (const m of mobiles) {
+    allMobileFormats.add(m);
+    if (m.startsWith('880')) allMobileFormats.add(`0${m.slice(3)}`);
+  }
+
   const [mobilePersons, claimedPersons] = await Promise.all([
     mobiles.length
-      ? Person.find({ mobile: { $in: mobiles }, isDeleted: ACTIVE })
+      ? Person.find({ mobile: { $in: [...allMobileFormats] }, isDeleted: ACTIVE })
           .populate(personPopulate)
           .sort({ updatedAt: -1 })
       : Promise.resolve([]),
     Person.find({ claimedBy: { $in: accountIds }, isDeleted: ACTIVE }).populate(personPopulate),
   ]);
 
-  // Build mobile → best-person map
+  // Build mobile → best-person map (compare by normalized mobile to handle legacy formats)
   const byMobile = new Map();
   for (const mobile of mobiles) {
-    const matches = mobilePersons.filter((p) => p.mobile === mobile);
+    const normalizedM = normMob(mobile);
+    const matches = mobilePersons.filter((p) => normMob(p.mobile) === normalizedM);
     const acc = accounts.find((a) => a.mobile === mobile);
     const picked = pickLinkedPerson(matches, acc?._id);
     if (picked) byMobile.set(mobile, picked);
@@ -478,17 +510,22 @@ async function _listPaginated({
     Person.find(exactPersonFilter, { _id: 1, mobile: 1, type: 1, updatedAt: 1, claimedBy: 1 }).lean(),
   ]);
 
-  const accountMobiles = new Set(accountsMinimal.map((a) => a.mobile).filter(Boolean));
+  // Normalize account mobiles so that legacy Person records stored in local
+  // format ("01781018215") are correctly matched against accounts stored in
+  // international format ("8801781018215"). All comparisons use normMob().
+  const accountMobiles = new Set(accountsMinimal.map((a) => normMob(a.mobile)).filter(Boolean));
   const accountIdStrings = new Set(accountsMinimal.map((a) => String(a._id)));
 
   // Dedup: identify accounts that already have a mobile-matched person, so that
   // claimedBy persons for those accounts are NOT excluded (they may appear standalone).
   const mobilesWithPersonMatch = new Set(
-    personsMinimal.filter((p) => p.mobile && accountMobiles.has(p.mobile)).map((p) => p.mobile),
+    personsMinimal
+      .filter((p) => { const m = normMob(p.mobile); return m && accountMobiles.has(m); })
+      .map((p) => normMob(p.mobile)),
   );
   const accountsWithMobileMatch = new Set(
     accountsMinimal
-      .filter((a) => a.mobile && mobilesWithPersonMatch.has(a.mobile))
+      .filter((a) => { const m = normMob(a.mobile); return m && mobilesWithPersonMatch.has(m); })
       .map((a) => String(a._id)),
   );
 
@@ -506,7 +543,8 @@ async function _listPaginated({
   const standalonePersonItems = personsMinimal
     .filter((p) => {
       if (p.type !== 'sathi') return true;
-      if (p.mobile && accountMobiles.has(p.mobile)) return false;
+      const pm = normMob(p.mobile);
+      if (pm && accountMobiles.has(pm)) return false;
       if (representedPersonIds.has(String(p._id))) return false;
       return true;
     })
@@ -639,8 +677,10 @@ async function _listWithSearch({
       : Promise.resolve([]),
   ]);
 
-  // Step 2: Lean dedup — one small query instead of findLinkedPersonsForAccounts(ALL accounts)
-  const accountMobiles = new Set(accounts.map((a) => a.mobile).filter(Boolean));
+  // Step 2: Lean dedup — one small query instead of findLinkedPersonsForAccounts(ALL accounts).
+  // Normalize all mobiles so that legacy Person records stored in local format ("01781018215")
+  // are correctly matched against accounts stored in international format ("8801781018215").
+  const accountMobiles = new Set(accounts.map((a) => normMob(a.mobile)).filter(Boolean));
   const accountIds = accounts.map((a) => a._id);
 
   const claimedPersonsLean = accountIds.length
@@ -653,11 +693,13 @@ async function _listWithSearch({
   // Replicate the original claimedBy-fallback rule: only exclude claimedBy persons
   // for accounts that have NO mobile-matched person (same logic as findLinkedPersonsForAccounts).
   const mobilesWithPersonMatch = new Set(
-    persons.filter((p) => p.mobile && accountMobiles.has(p.mobile)).map((p) => p.mobile),
+    persons
+      .filter((p) => { const m = normMob(p.mobile); return m && accountMobiles.has(m); })
+      .map((p) => normMob(p.mobile)),
   );
   const accountsWithMobileMatch = new Set(
     accounts
-      .filter((a) => a.mobile && mobilesWithPersonMatch.has(a.mobile))
+      .filter((a) => { const m = normMob(a.mobile); return m && mobilesWithPersonMatch.has(m); })
       .map((a) => String(a._id)),
   );
   const representedPersonIds = new Set();
@@ -669,7 +711,8 @@ async function _listWithSearch({
 
   const filteredPersons = persons.filter((p) => {
     if (p.type !== 'sathi') return true;
-    if (p.mobile && accountMobiles.has(p.mobile)) return false;
+    const pm = normMob(p.mobile);
+    if (pm && accountMobiles.has(pm)) return false;
     if (representedPersonIds.has(String(p._id))) return false;
     return true;
   });

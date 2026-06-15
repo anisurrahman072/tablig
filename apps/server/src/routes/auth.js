@@ -68,9 +68,16 @@ async function ensureAccountHouseAddress(account) {
   return account;
 }
 
+function buildMobileQuery(normalized) {
+  // Include both normalized international format and legacy local format so that
+  // Person records saved before mobile normalization was enforced are still found.
+  const local = normalized.startsWith('880') ? `0${normalized.slice(3)}` : null;
+  return local && local !== normalized ? { $in: [normalized, local] } : normalized;
+}
+
 async function findUnclaimedPersonByMobile(mobile) {
   return Person.findOne({
-    mobile,
+    mobile: buildMobileQuery(mobile),
     isDeleted: ACTIVE,
     claimedBy: null,
   });
@@ -136,7 +143,7 @@ async function createAccountFromSignupData(data) {
   const mobile = normalizeMobile(data.mobile);
 
   const unclaimedPersons = await Person.find({
-    mobile,
+    mobile: buildMobileQuery(mobile),
     isDeleted: ACTIVE,
     claimedBy: null,
   });
