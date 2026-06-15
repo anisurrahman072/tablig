@@ -16,6 +16,7 @@ import { SearchHubCard } from "../../components/SearchHubCard";
 import { AdminHubCard } from "../../components/AdminHubCard";
 import { AppText } from "../../components/AppText";
 import { useAuth } from "../../context/AuthContext";
+import { wakeupServer } from "../../lib/api";
 import { colors, radius, shadows, spacing } from "../../theme";
 
 export default function HomeScreen() {
@@ -24,6 +25,7 @@ export default function HomeScreen() {
 
   useFocusEffect(
     useCallback(() => {
+      wakeupServer();
       refreshAccount().catch(() => {});
     }, [refreshAccount]),
   );

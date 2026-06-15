@@ -39,6 +39,11 @@ app.get('/api/health', (req, res) => {
   res.json({ success: true, message: 'সার্ভার চালু আছে' });
 });
 
+app.get('/api/wakeup', (req, res) => {
+  console.log('[wakeup] Server now awake');
+  res.json({ success: true });
+});
+
 app.use('/api/auth', authRoutes);
 app.use('/api/masjids', masjidRoutes);
 app.use('/api/schools', schoolRoutes);

@@ -1,16 +1,23 @@
-import React from 'react';
+import React, { useCallback } from 'react';
 import { View, StyleSheet } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { GradientBackground } from '../../components/GradientBackground';
 import { AppLogo } from '../../components/AppLogo';
 import { AppText } from '../../components/AppText';
 import { PrimaryButton } from '../../components/PrimaryButton';
+import { wakeupServer } from '../../lib/api';
 import { colors, radius, spacing } from '../../theme';
 
 export default function WelcomeScreen() {
   const router = useRouter();
+
+  useFocusEffect(
+    useCallback(() => {
+      wakeupServer();
+    }, []),
+  );
 
   return (
     <GradientBackground>

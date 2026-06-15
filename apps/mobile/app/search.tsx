@@ -10,6 +10,7 @@ import {
   TextInput,
   ScrollView,
   Dimensions,
+  RefreshControl,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
@@ -93,6 +94,13 @@ export default function SearchScreen() {
   const [showFilters, setShowFilters] = useState(params.openFilters === "1");
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [smsTarget, setSmsTarget] = useState<DirectoryEntry | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
+
+  async function onRefresh() {
+    setRefreshing(true);
+    await silentRefresh();
+    setRefreshing(false);
+  }
 
   const actionHint = React.useMemo(() => {
     switch (params.action) {
@@ -336,6 +344,9 @@ export default function SearchScreen() {
               styles.listContent,
               selectionCount > 0 && styles.listContentWithBar,
             ]}
+            refreshControl={
+              <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+            }
             keyboardShouldPersistTaps="handled"
             data={results}
             keyExtractor={(item) => item._id}

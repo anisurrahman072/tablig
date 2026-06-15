@@ -12,6 +12,11 @@ export function setAuthToken(token: string | null) {
   authToken = token;
 }
 
+/** Fire-and-forget ping to wake Render free-tier server from sleep. */
+export function wakeupServer(): void {
+  api.get('/wakeup', { timeout: 30000 }).catch(() => {});
+}
+
 const api = axios.create({
   baseURL: API_URL,
   timeout: 60000,
@@ -28,12 +33,15 @@ api.interceptors.request.use((config) => {
 api.interceptors.response.use(
   (res) => res,
   (error) => {
+    const isNetworkError = !error.response;
     const message =
       error.response?.data?.message ||
-      (error.response
-        ? 'সার্ভারে সমস্যা হয়েছে'
-        : 'সার্ভারে সংযোগ করা যায়নি। সার্ভার চালু আছে কিনা এবং ফোন একই Wi‑Fi-তে আছে কিনা দেখুন।');
-    return Promise.reject(new Error(message));
+      (isNetworkError
+        ? 'নেটওয়ার্ক সমস্যা হয়েছে। ইন্টারনেট সংযোগ দেখুন।'
+        : 'সার্ভারে সমস্যা হয়েছে');
+    const err = new Error(message) as Error & { isNetworkError: boolean };
+    err.isNetworkError = isNetworkError;
+    return Promise.reject(err);
   }
 );
 

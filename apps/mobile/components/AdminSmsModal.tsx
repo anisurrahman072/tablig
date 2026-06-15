@@ -67,7 +67,18 @@ export function AdminSmsModal({
       appAlert('সফল', 'এসএমএস পাঠানো হয়েছে');
       onClose();
     } catch (err: any) {
-      appAlert('ত্রুটি', err.message || 'এসএমএস পাঠাতে ব্যর্থ');
+      if (err.isNetworkError) {
+        // The request was sent but the network dropped before the response arrived.
+        // The SMS may have already been delivered — close the modal instead of
+        // leaving the user stuck with a misleading "connection error" alert.
+        appAlert(
+          'নেটওয়ার্ক সমস্যা',
+          'নেটওয়ার্ক সমস্যার কারণে নিশ্চিত হওয়া যায়নি। এসএমএস পাঠানো হয়ে থাকতে পারে।'
+        );
+        onClose();
+      } else {
+        appAlert('ত্রুটি', err.message || 'এসএমএস পাঠাতে ব্যর্থ');
+      }
     } finally {
       setSending(false);
     }

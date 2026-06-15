@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   StyleSheet,
   View,
@@ -10,10 +10,11 @@ import {
   TextInput,
   ScrollView,
   Dimensions,
+  RefreshControl,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { BackButton } from '../components/BackButton';
 import { GradientBackground } from '../components/GradientBackground';
@@ -190,7 +191,26 @@ export default function KarguzariSelectScreen() {
     updateFilter,
     clearFilters,
     loadMore,
+    silentRefresh,
   } = useDirectorySearch({ withKarguzari: true });
+  const isFirstFocus = useRef(true);
+  const [refreshing, setRefreshing] = useState(false);
+
+  useFocusEffect(
+    useCallback(() => {
+      if (isFirstFocus.current) {
+        isFirstFocus.current = false;
+        return;
+      }
+      silentRefresh();
+    }, [silentRefresh]),
+  );
+
+  async function onRefresh() {
+    setRefreshing(true);
+    await silentRefresh();
+    setRefreshing(false);
+  }
 
   useEffect(() => {
     api.get('/masjids').then((res) => setMasjids(res.data.data));
@@ -355,6 +375,9 @@ export default function KarguzariSelectScreen() {
         >
           <FlatList
             contentContainerStyle={styles.listContent}
+            refreshControl={
+              <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+            }
             keyboardShouldPersistTaps="handled"
             data={results}
             keyExtractor={(item) => item._id}
