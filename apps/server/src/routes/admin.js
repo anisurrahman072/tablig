@@ -92,7 +92,7 @@ async function ensureAccountForAdminGrant({ mobile, person }) {
 
   if (!account) {
     const defaultMasjid =
-      person?.masjid || (await Masjid.findOne().sort({ name: 1 }))?.name;
+      person?.masjid || (await Masjid.findOne().sort({ createdAt: 1 }))?.name;
     if (!defaultMasjid) {
       throw new AppError("কোনো মসজিদ পাওয়া যায়নি");
     }
@@ -207,7 +207,7 @@ router.delete("/admins/:mobile", async (req, res, next) => {
 
 router.get("/masjids", async (req, res, next) => {
   try {
-    const masjids = await Masjid.find().sort({ name: 1 });
+    const masjids = await Masjid.find().sort({ createdAt: 1 });
     res.json({
       success: true,
       data: masjids.map((m) => ({ id: m._id, name: m.name })),
@@ -320,7 +320,7 @@ router.delete("/masjids/:id", async (req, res, next) => {
 // ── Schools ──────────────────────────────────────────────
 router.get("/schools", async (req, res, next) => {
   try {
-    const schools = await School.find({ isDeleted: ACTIVE }).sort({ name: 1 });
+    const schools = await School.find({ isDeleted: ACTIVE }).sort({ createdAt: 1 });
     res.json({
       success: true,
       data: schools.map((s) => ({ id: s._id, name: s.name })),

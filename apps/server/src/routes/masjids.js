@@ -5,7 +5,7 @@ const router = express.Router();
 
 router.get('/', async (req, res, next) => {
   try {
-    const masjids = await Masjid.find().sort({ name: 1 }).select('name');
+    const masjids = await Masjid.find().sort({ createdAt: 1 }).select('name');
     res.json({
       success: true,
       data: masjids.map((m) => m.name),
